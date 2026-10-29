@@ -1,0 +1,54 @@
+[defaults]
+# Inventory file location
+inventory = ./inventory/hosts
+
+# Default remote user
+remote_user = ansible
+
+# SSH key file location
+private_key_file = ~/.ssh/id_rsa
+
+# Disable host key checking for lab environment
+host_key_checking = False
+
+# Set default verbosity level (0=minimal, 1=verbose, 2=more verbose, 3=debug, 4=connection debug)
+verbosity = 1
+
+# Number of parallel processes
+forks = 5
+
+# Timeout for SSH connections (seconds)
+timeout = 30
+
+# Enable pipelining for better performance
+pipelining = True
+
+# Retry settings
+retry_files_enabled = True
+retry_files_save_path = ./retry_files
+
+# Logging configuration
+log_path = ./ansible.log
+
+# Callback plugins for enhanced output
+stdout_callback = yaml
+bin_ansible_callbacks = True
+
+[ssh_connection]
+# SSH connection settings
+ssh_args = -o ControlMaster=auto -o ControlPersist=60s -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes
+
+# Connection timeout
+timeout = 30
+
+# Enable SSH pipelining
+pipelining = True
+
+[persistent_connection]
+# Persistent connection timeout
+command_timeout = 30
+connect_timeout = 30
+
+[inventory]
+# Enable inventory plugins
+enable_plugins = host_list, script, auto, yaml, ini, toml

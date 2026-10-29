@@ -1,0 +1,32 @@
+---
+- name: Test Ansible Configuration Settings
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Display system information
+      debug:
+        msg: "System {{ inventory_hostname }} has {{ ansible_processor_cores }} CPU cores"
+
+    - name: Check disk space
+      command: df -h /
+      register: disk_space
+      changed_when: false
+
+    - name: Display disk space
+      debug:
+        var: disk_space.stdout_lines
+
+    - name: Create a test file
+      file:
+        path: /tmp/ansible-test-{{ ansible_date_time.epoch }}
+        state: touch
+        mode: '0644'
+
+    - name: Intentional task that might fail (for retry testing)
+      command: /bin/false
+      ignore_errors: yes
+      register: failure_test
+
+    - name: Display failure result
+      debug:
+        msg: "Task failed as expected: {{ failure_test.failed }}"
