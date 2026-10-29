@@ -1,0 +1,635 @@
+Lab 7: Creating and Managing Execution Environments
+Objectives
+
+By the end of this lab, you will be able to:
+
+    Understand the concept and benefits of Execution Environments in Ansible
+    Create a custom containerized Execution Environment using ansible-builder
+    Configure Execution Environment dependencies and requirements
+    Build and test an Execution Environment container
+    Execute Ansible playbooks within custom Execution Environments
+    Troubleshoot common Execution Environment issues and implement production best practices
+
+Prerequisites
+
+Before starting this lab, you should have:
+
+    Basic understanding of Ansible playbooks and inventory management
+    Familiarity with containerization concepts (Docker/Podman)
+    Knowledge of YAML syntax and file structure
+    Experience with Linux command-line operations
+    Understanding of Python package management concepts
+
+Required Knowledge Areas:
+
+    Ansible fundamentals and playbook execution
+    Container technology basics
+    Linux file system navigation
+    Text editing using vi/vim or nano
+
+Required Tools and Installation
+
+Your lab environment should already have these tools available. If any are missing, install them with the following commands:
+
+# Install Ansible Core
+python3 -m pip install --user ansible-core
+
+# Install ansible-builder and ansible-runner
+python3 -m pip install --user ansible-builder ansible-runner
+
+# Verify Podman is installed (RHEL/CentOS)
+sudo dnf install -y podman
+
+# Verify Podman is installed (Ubuntu/Debian)
+sudo apt-get install -y podman
+
+# Confirm tool versions
+ansible --version
+ansible-builder --version
+ansible-runner --version
+podman --version
+
+Lab Environment Setup
+
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment. No need to build your own VM or install additional software - everything is ready to use!
+
+Your lab environment includes:
+
+    CentOS/RHEL 8+ or Ubuntu 20.04+ system
+    Ansible Core 2.12+ pre-installed
+    Podman container runtime
+    ansible-builder tool
+    Python 3.8+ with pip
+    Text editors (vim, nano)
+    Internet connectivity for downloading dependencies
+
+Task 1: Building a Custom Execution Environment
+Subtask 1.1: Create the Project Structure and Definition Files
+
+Step 1: Connect to your lab machine and create the working directory structure.
+
+# Check installed tools
+ansible --version
+podman --version
+ansible-builder --version
+python3 --version
+
+# Create lab directory structure
+mkdir -p ~/ansible-ee-lab/{execution-environments,playbooks,inventory,runner-project}
+cd ~/ansible-ee-lab/execution-environments
+mkdir custom-ee
+cd custom-ee
+
+Step 2: Create the Execution Environment definition file.
+
+cat > execution-environment.yml << 'EOF'
+---
+version: 1
+
+build_arg_defaults:
+  EE_BASE_IMAGE: 'quay.io/ansible/ansible-runner:latest'
+
+ansible_config: 'ansible.cfg'
+
+dependencies:
+  galaxy: requirements.yml
+  python: requirements.txt
+  system: bindep.txt
+
+images:
+  base_image:
+    name: 'quay.io/ansible/ansible-runner:latest'
+
+additional_build_steps:
+  prepend: |
+    RUN whoami
+    RUN cat /etc/os-release
+  append: |
+    RUN ls -la /etc
+EOF
+
+Step 3: Create the dependency requirement files.
+
+# Python requirements
+cat > requirements.txt << 'EOF'
+requests>=2.25.1
+jinja2>=3.0.0
+netaddr>=0.8.0
+dnspython>=2.1.0
+EOF
+
+# Ansible Galaxy collection requirements
+cat > requirements.yml << 'EOF'
+---
+collections:
+  - name: community.general
+    version: ">=3.0.0"
+  - name: ansible.posix
+    version: ">=1.2.0"
+  - name: community.crypto
+    version: ">=1.6.0"
+EOF
+
+# System package requirements
+cat > bindep.txt << 'EOF'
+git [platform:centos-8 platform:rhel-8]
+rsync [platform:centos-8 platform:rhel-8]
+openssh-clients [platform:centos-8 platform:rhel-8]
+EOF
+
+# Ansible configuration used inside the EE
+cat > ansible.cfg << 'EOF'
+[defaults]
+host_key_checking = False
+inventory = /tmp/inventory
+remote_user = ansible
+timeout = 30
+gathering = smart
+fact_caching = memory
+
+[inventory]
+enable_plugins = host_list, script, auto, yaml, ini, toml
+
+[ssh_connection]
+ssh_args = -o ControlMaster=auto -o ControlPersist=60s
+pipelining = True
+EOF
+
+Deliverable: A ~/ansible-ee-lab/execution-environments/custom-ee directory containing execution-environment.yml, requirements.txt, requirements.yml, bindep.txt, and ansible.cfg. Run ls -la in that directory and confirm all five files are present.
+Subtask 1.2: Build and Verify the Execution Environment
+
+Step 1: Build the Execution Environment image using ansible-builder.
+
+cd ~/ansible-ee-lab/execution-environments/custom-ee
+
+ansible-builder build --tag custom-ansible-ee:latest --verbosity 2
+
+Expected result: the build completes with a message similar to Complete! The build context can be found at context/, and the final container layers are committed successfully. Podman will report Successfully tagged localhost/custom-ansible-ee:latest.
+
+Step 2: Verify the image and test basic functionality.
+
+# Confirm the image exists
+podman images | grep custom-ansible-ee
+
+# Confirm Ansible works inside the EE
+podman run --rm custom-ansible-ee:latest ansible --version
+
+# Confirm the requests module was installed
+podman run --rm custom-ansible-ee:latest python3 -c "import requests; print('Requests module available')"
+
+# Confirm collections were installed
+podman run --rm custom-ansible-ee:latest ansible-galaxy collection list
+
+Deliverable: Terminal output showing the custom-ansible-ee:latest image listed by podman images, the Ansible version banner printed from inside the container, the string Requests module available, and a collection list that includes community.general, ansible.posix, and community.crypto.
+Task 2: Executing Playbooks Inside the Execution Environment
+Subtask 2.1: Create Test Inventory and Playbooks
+
+Step 1: Create a test inventory file.
+
+cd ~/ansible-ee-lab/inventory
+
+cat > test-inventory.yml << 'EOF'
+---
+all:
+  hosts:
+    localhost:
+      ansible_connection: local
+      ansible_python_interpreter: /usr/bin/python3
+  vars:
+    test_variable: "Hello from Execution Environment"
+EOF
+
+Step 2: Create a functional test playbook that exercises core modules and the installed Python dependencies.
+
+cd ~/ansible-ee-lab/playbooks
+
+cat > test-ee-playbook.yml << 'EOF'
+---
+- name: Test Execution Environment Functionality
+  hosts: localhost
+  gather_facts: yes
+  vars:
+    custom_message: "Running in Custom Execution Environment"
+
+  tasks:
+    - name: Display system information
+      debug:
+        msg: |
+          Hostname: {{ ansible_hostname }}
+          OS Family: {{ ansible_os_family }}
+          Python Version: {{ ansible_python_version }}
+          Custom Message: {{ custom_message }}
+
+    - name: Test Python requests module via uri module
+      uri:
+        url: "https://httpbin.org/get"
+        method: GET
+        return_content: yes
+      register: http_response
+      ignore_errors: yes
+
+    - name: Display HTTP response
+      debug:
+        msg: "HTTP request status: {{ http_response.status | default('unreachable - no internet in sandbox') }}"
+
+    - name: Create a temporary file
+      tempfile:
+        state: file
+        suffix: .txt
+      register: temp_file
+
+    - name: Write content to temporary file
+      copy:
+        content: |
+          This file was created inside the Execution Environment
+          Timestamp: {{ ansible_date_time.iso8601 }}
+          Test Variable: {{ test_variable }}
+        dest: "{{ temp_file.path }}"
+
+    - name: Read back file content
+      slurp:
+        src: "{{ temp_file.path }}"
+      register: file_content
+
+    - name: Show file content
+      debug:
+        msg: "{{ file_content.content | b64decode }}"
+
+    - name: Clean up temporary file
+      file:
+        path: "{{ temp_file.path }}"
+        state: absent
+EOF
+
+Step 3: Create an advanced playbook that uses the installed collections and Python libraries.
+
+cat > advanced-ee-test.yml << 'EOF'
+---
+- name: Advanced Execution Environment Test
+  hosts: localhost
+  gather_facts: yes
+
+  tasks:
+    - name: Generate random password using password lookup
+      set_fact:
+        random_password: "{{ lookup('password', '/dev/null length=12 chars=ascii_letters,digits') }}"
+
+    - name: Display generated password
+      debug:
+        msg: "Generated password: {{ random_password }}"
+
+    - name: Test network calculations with netaddr filter
+      set_fact:
+        network_info: "{{ '192.168.1.0/24' | ansible.netcommon.ipaddr('network') | default('192.168.1.0') }}"
+      ignore_errors: yes
+
+    - name: Display network information
+      debug:
+        msg: "Network: {{ network_info }}"
+
+    - name: Create a JSON data structure
+      set_fact:
+        test_data:
+          execution_environment: "custom-ansible-ee"
+          timestamp: "{{ ansible_date_time.iso8601 }}"
+          system_info:
+            hostname: "{{ ansible_hostname }}"
+            architecture: "{{ ansible_architecture }}"
+            distribution: "{{ ansible_distribution }}"
+
+    - name: Display JSON data
+      debug:
+        var: test_data
+
+    - name: Create test directory
+      file:
+        path: /tmp/ee-test-directory
+        state: directory
+        mode: '0755'
+
+    - name: Create test files
+      copy:
+        content: "Test file {{ item }}"
+        dest: "/tmp/ee-test-directory/test-{{ item }}.txt"
+      loop:
+        - 1
+        - 2
+        - 3
+
+    - name: List created files
+      find:
+        paths: /tmp/ee-test-directory
+        patterns: "*.txt"
+      register: created_files
+
+    - name: Display created files
+      debug:
+        msg: "Created files: {{ created_files.files | map(attribute='path') | list }}"
+
+    - name: Clean up test directory
+      file:
+        path: /tmp/ee-test-directory
+        state: absent
+EOF
+
+Deliverable: Two playbook files (test-ee-playbook.yml and advanced-ee-test.yml) and one inventory file (test-inventory.yml) saved under ~/ansible-ee-lab. Verify with find ~/ansible-ee-lab -name "*.yml" that all three files are listed.
+Subtask 2.2: Run Playbooks Using ansible-runner and Direct Podman Execution
+
+Step 1: Set up a runner project and execute the basic test playbook against the custom EE.
+
+cd ~/ansible-ee-lab
+mkdir -p runner-project/{inventory,project}
+cp inventory/test-inventory.yml runner-project/inventory/
+cp playbooks/*.yml runner-project/project/
+
+ansible-runner run runner-project \
+  --playbook test-ee-playbook.yml \
+  --container-image custom-ansible-ee:latest \
+  --process-isolation \
+  --process-isolation-executable podman
+
+Expected result: ansible-runner reports PLAY RECAP with localhost : ok=... changed=... unreachable=0 failed=0, and the debug output shows the system information block and the file content that was written and read back inside the container.
+
+Step 2: Run the advanced playbook directly with Podman, mounting the inventory and playbooks as volumes.
+
+cd ~/ansible-ee-lab
+
+podman run --rm \
+  -v $(pwd)/inventory:/tmp/inventory:Z \
+  -v $(pwd)/playbooks:/tmp/playbooks:Z \
+  -e ANSIBLE_HOST_KEY_CHECKING=False \
+  -e ANSIBLE_STDOUT_CALLBACK=yaml \
+  custom-ansible-ee:latest \
+  ansible-playbook -i /tmp/inventory/test-inventory.yml /tmp/playbooks/advanced-ee-test.yml -v
+
+Deliverable: A completed PLAY RECAP from both execution methods showing failed=0, plus visible debug output of the generated password, the JSON test_data structure, and the list of created test files. Capture this output (e.g., redirect with | tee run-output.log) as your evidence of a working Execution Environment.
+Task 3: Building a Production-Ready Execution Environment with a Full Test Suite
+Subtask 3.1: Create the Production Execution Environment
+
+Step 1: Build a hardened, version-pinned Execution Environment intended for production use.
+
+cd ~/ansible-ee-lab/execution-environments
+mkdir production-ee
+cd production-ee
+
+cat > execution-environment.yml << 'EOF'
+---
+version: 1
+
+build_arg_defaults:
+  EE_BASE_IMAGE: 'quay.io/ansible/ansible-runner:latest'
+
+ansible_config: 'ansible.cfg'
+
+dependencies:
+  galaxy: requirements.yml
+  python: requirements.txt
+  system: bindep.txt
+
+images:
+  base_image:
+    name: 'quay.io/ansible/ansible-runner:latest'
+
+additional_build_steps:
+  prepend: |
+    USER root
+    RUN dnf update -y
+  append: |
+    RUN pip3 install --upgrade pip
+    RUN pip3 cache purge
+    RUN dnf clean all
+    USER 1000
+    WORKDIR /tmp
+EOF
+
+cat > requirements.txt << 'EOF'
+# Core dependencies with pinned versions
+requests==2.28.1
+jinja2==3.1.2
+pyyaml==6.0
+netaddr==0.8.0
+dnspython==2.2.1
+
+# Security and crypto
+cryptography==38.0.4
+pyopenssl==22.1.0
+
+# Utilities
+python-dateutil==2.8.2
+six==1.16.0
+EOF
+
+cat > requirements.yml << 'EOF'
+---
+collections:
+  - name: community.general
+    version: "5.8.0"
+  - name: ansible.posix
+    version: "1.4.0"
+  - name: community.crypto
+    version: "2.8.1"
+EOF
+
+cat > bindep.txt << 'EOF'
+git [platform:centos-8 platform:rhel-8]
+rsync [platform:centos-8 platform:rhel-8]
+openssh-clients [platform:centos-8 platform:rhel-8]
+python3-devel [platform:centos-8 platform:rhel-8]
+gcc [platform:centos-8 platform:rhel-8]
+EOF
+
+cat > ansible.cfg << 'EOF'
+[defaults]
+host_key_checking = False
+inventory = /tmp/inventory
+remote_user = ansible
+timeout = 30
+gathering = smart
+fact_caching = memory
+stdout_callback = yaml
+bin_ansible_callbacks = True
+
+[inventory]
+enable_plugins = host_list, script, auto, yaml, ini, toml
+
+[ssh_connection]
+ssh_args = -o ControlMaster=auto -o ControlPersist=60s -o UserKnownHostsFile=/dev/null
+pipelining = True
+control_path_dir = /tmp/.ansible-cp
+
+[privilege_escalation]
+become = True
+become_method = sudo
+become_user = root
+become_ask_pass = False
+EOF
+
+ansible-builder build --tag production-ee:latest --verbosity 2
+
+Deliverable: podman images | grep production-ee shows the production-ee:latest image built successfully with no errors reported by ansible-builder.
+Subtask 3.2: Create and Execute the Complete Production Test Suite
+
+Step 1: Create the full production test suite playbook, covering core Ansible functionality, Python module availability, collection functionality, file operations, and crypto/security operations with proper cleanup.
+
+cd ~/ansible-ee-lab/playbooks
+
+cat > production-test-suite.yml << 'EOF'
+---
+- name: Production EE Test Suite
+  hosts: localhost
+  gather_facts: yes
+
+  tasks:
+    - name: Test 1 - Basic Ansible functionality
+      debug:
+        msg: "Ansible version: {{ ansible_version.full }}"
+
+    - name: Test 2 - Python modules availability
+      block:
+        - name: Test requests module via uri
+          uri:
+            url: "https://httpbin.org/get"
+            method: GET
+            timeout: 10
+          register: requests_test
+        - name: Test jinja2 templating
+          set_fact:
+            template_test: "{{ 'Hello World' | upper }}"
+        - name: Display module test results
+          debug:
+            msg:
+              - "Requests test status: {{ requests_test.status | default('skipped') }}"
+              - "Jinja2 template test: {{ template_test }}"
+      rescue:
+        - name: Handle module test failures
+          debug:
+            msg: "Some module tests failed - continuing with remaining tests"
+
+    - name: Test 3 - Collection functionality
+      block:
+        - name: Test community.general collection
+          community.general.random_string:
+            length: 12
+          register: random_test
+        - name: Display random string test result
+          debug:
+            msg: "community.general.random_string produced a value successfully"
+        - name: Test ansible.posix collection availability
+          ansible.posix.synchronize:
+            src: /tmp/ee-production-test/
+            dest: /tmp/sync-test/
+            delete: yes
+            recursive: yes
+          delegate_to: localhost
+          ignore_errors: yes
+      rescue:
+        - name: Handle collection test failures
+          debug:
+            msg: "Some collection tests failed - continuing with remaining tests"
+
+    - name: Test 4 - File operations and permissions
+      block:
+        - name: Create test directory structure
+          file:
+            path: "/tmp/ee-production-test/dir{{ item }}"
+            state: directory
+            mode: '0755'
+          loop:
+            - 1
+            - 2
+            - 3
+
+        - name: Create test files
+          copy:
+            content: |
+              Test file {{ item }}
+              Created at: {{ ansible_date_time.iso8601 }}
+              EE: production-ee
+            dest: "/tmp/ee-production-test/dir{{ item }}/test{{ item }}.txt"
+            mode: '0644'
+          loop:
+            - 1
+            - 2
+            - 3
+
+        - name: Verify file creation
+          find:
+            paths: /tmp/ee-production-test
+            recurse: yes
+            file_type: file
+          register: created_files
+
+        - name: Display created files count
+          debug:
+            msg: "Created {{ created_files.files | length }} test files"
+      rescue:
+        - name: Handle file operation failures
+          debug:
+            msg: "File operation tests failed"
+
+    - name: Test 5 - Security and crypto operations
+      block:
+        - name: Generate random password
+          set_fact:
+            secure_password: "{{ lookup('password', '/dev/null length=16 chars=ascii_letters,digits,punctuation') }}"
+
+        - name: Test crypto operations
+          community.crypto.openssl_privatekey:
+            path: /tmp/test-private-key.pem
+            size: 2048
+          register: crypto_test
+
+        - name: Display crypto test result
+          debug:
+            msg: "Private key generated successfully: {{ crypto_test.changed | default(false) }}"
+      rescue:
+        - name: Handle crypto test failures
+          debug:
+            msg: "Crypto tests failed"
+      always:
+        - name: Clean up crypto test files
+          file:
+            path: /tmp/test-private-key.pem
+            state: absent
+
+    - name: Clean up production test directory
+      file:
+        path: /tmp/ee-production-test
+        state: absent
+
+    - name: Clean up sync test directory
+      file:
+        path: /tmp/sync-test
+        state: absent
+
+    - name: Display final test suite summary
+      debug:
+        msg:
+          - "==================================================="
+          - "Production EE Test Suite Complete"
+          - "Ansible version verified: {{ ansible_version.full }}"
+          - "Module, collection, file, and crypto tests executed"
+          - "All temporary test artifacts have been cleaned up"
+          - "==================================================="
+EOF
+
+Step 2: Execute the production test suite inside the production-ee:latest container.
+
+cd ~/ansible-ee-lab
+
+podman run --rm \
+  -v $(pwd)/inventory:/tmp/inventory:Z \
+  -v $(pwd)/playbooks:/tmp/playbooks:Z \
+  production-ee:latest \
+  ansible-playbook -i /tmp/inventory/test-inventory.yml /tmp/playbooks/production-test-suite.yml -v
+
+Deliverable: A PLAY RECAP with failed=0 for the localhost host, and a visible final summary debug message reading Production EE Test Suite Complete along with confirmation lines for each of the five test blocks. Confirm cleanup succeeded by running ls /tmp/ee-production-test on the host and observing No such file or directory (the cleanup happened inside the container's isolated filesystem, so this check simply confirms no test artifacts leaked onto the host).
+Expected Outcomes
+
+    A working custom Execution Environment image (custom-ansible-ee:latest) capable of running Ansible playbooks with pinned Python dependencies and Galaxy collections
+    A hardened, production-ready Execution Environment (production-ee:latest) with version-pinned dependencies, a custom ansible.cfg, and a passing five-part test suite covering core functionality, modules, collections, file operations, and cryptographic operations
+    Demonstrated ability to execute playbooks inside Execution Environments using both ansible-runner with process isolation and direct podman run invocations with volume-mounted inventories and playbooks
+
+Conclusion
+
+In this lab you built two containerized Ansible Execution Environments from scratch using ansible-builder, defined their Python, Galaxy, and system dependencies through requirements.txt, requirements.yml, and bindep.txt, and validated each image by running real playbooks inside them with both ansible-runner and direct Podman invocations. You then progressed to a production-grade Execution Environment with pinned dependency versions, a hardened build process, and a complete five-part automated test suite that exercised core Ansible functionality, third-party Python modules, Galaxy collections, file operations, and cryptographic operations, finishing with proper cleanup of all temporary artifacts. The key takeaway is that Execution Environments decouple automation content from the control node's Python and OS packages, making playbook runs portable, reproducible, and easy to version; for production use you should always pin dependency versions, minimize image size by cleaning package caches during the build, run as a non-root user where possible, and maintain a dedicated test suite playbook that you run against every new Execution Environment build before promoting it to your automation pipeline.

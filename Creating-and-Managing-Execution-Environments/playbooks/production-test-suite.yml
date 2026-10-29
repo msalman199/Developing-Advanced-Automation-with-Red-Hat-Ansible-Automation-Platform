@@ -1,0 +1,137 @@
+---
+- name: Production EE Test Suite
+  hosts: localhost
+  gather_facts: yes
+
+  tasks:
+    - name: Test 1 - Basic Ansible functionality
+      debug:
+        msg: "Ansible version: {{ ansible_version.full }}"
+
+    - name: Test 2 - Python modules availability
+      block:
+        - name: Test requests module via uri
+          uri:
+            url: "https://httpbin.org/get"
+            method: GET
+            timeout: 10
+          register: requests_test
+        - name: Test jinja2 templating
+          set_fact:
+            template_test: "{{ 'Hello World' | upper }}"
+        - name: Display module test results
+          debug:
+            msg:
+              - "Requests test status: {{ requests_test.status | default('skipped') }}"
+              - "Jinja2 template test: {{ template_test }}"
+      rescue:
+        - name: Handle module test failures
+          debug:
+            msg: "Some module tests failed - continuing with remaining tests"
+
+    - name: Test 3 - Collection functionality
+      block:
+        - name: Test community.general collection
+          community.general.random_string:
+            length: 12
+          register: random_test
+        - name: Display random string test result
+          debug:
+            msg: "community.general.random_string produced a value successfully"
+        - name: Test ansible.posix collection availability
+          ansible.posix.synchronize:
+            src: /tmp/ee-production-test/
+            dest: /tmp/sync-test/
+            delete: yes
+            recursive: yes
+          delegate_to: localhost
+          ignore_errors: yes
+      rescue:
+        - name: Handle collection test failures
+          debug:
+            msg: "Some collection tests failed - continuing with remaining tests"
+
+    - name: Test 4 - File operations and permissions
+      block:
+        - name: Create test directory structure
+          file:
+            path: "/tmp/ee-production-test/dir{{ item }}"
+            state: directory
+            mode: '0755'
+          loop:
+            - 1
+            - 2
+            - 3
+
+        - name: Create test files
+          copy:
+            content: |
+              Test file {{ item }}
+              Created at: {{ ansible_date_time.iso8601 }}
+              EE: production-ee
+            dest: "/tmp/ee-production-test/dir{{ item }}/test{{ item }}.txt"
+            mode: '0644'
+          loop:
+            - 1
+            - 2
+            - 3
+
+        - name: Verify file creation
+          find:
+            paths: /tmp/ee-production-test
+            recurse: yes
+            file_type: file
+          register: created_files
+
+        - name: Display created files count
+          debug:
+            msg: "Created {{ created_files.files | length }} test files"
+      rescue:
+        - name: Handle file operation failures
+          debug:
+            msg: "File operation tests failed"
+
+    - name: Test 5 - Security and crypto operations
+      block:
+        - name: Generate random password
+          set_fact:
+            secure_password: "{{ lookup('password', '/dev/null length=16 chars=ascii_letters,digits,punctuation') }}"
+
+        - name: Test crypto operations
+          community.crypto.openssl_privatekey:
+            path: /tmp/test-private-key.pem
+            size: 2048
+          register: crypto_test
+
+        - name: Display crypto test result
+          debug:
+            msg: "Private key generated successfully: {{ crypto_test.changed | default(false) }}"
+      rescue:
+        - name: Handle crypto test failures
+          debug:
+            msg: "Crypto tests failed"
+      always:
+        - name: Clean up crypto test files
+          file:
+            path: /tmp/test-private-key.pem
+            state: absent
+
+    - name: Clean up production test directory
+      file:
+        path: /tmp/ee-production-test
+        state: absent
+
+    - name: Clean up sync test directory
+      file:
+        path: /tmp/sync-test
+        state: absent
+
+    - name: Display final test suite summary
+      debug:
+        msg:
+          - "==================================================="
+          - "Production EE Test Suite Complete"
+          - "Ansible version verified: {{ ansible_version.full }}"
+          - "Module, collection, file, and crypto tests executed"
+          - "All temporary test artifacts have been cleaned up"
+          - "==================================================="

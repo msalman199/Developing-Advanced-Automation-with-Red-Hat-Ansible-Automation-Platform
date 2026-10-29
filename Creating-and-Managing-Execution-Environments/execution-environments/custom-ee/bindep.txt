@@ -1,0 +1,3 @@
+git [platform:centos-8 platform:rhel-8]
+rsync [platform:centos-8 platform:rhel-8]
+openssh-clients [platform:centos-8 platform:rhel-8]
