@@ -1,0 +1,43 @@
+---
+- name: Idempotent Playbook Example
+  hosts: node1
+  become: yes
+  vars:
+    log_file: /tmp/idempotent_log.txt
+    log_message: "Playbook execution completed successfully"
+    
+  tasks:
+    - name: Ensure log file exists with specific content (idempotent)
+      lineinfile:
+        path: "{{ log_file }}"
+        line: "{{ log_message }}"
+        create: yes
+        state: present
+      register: log_result
+      
+    - name: Display log file change status
+      debug:
+        msg: "Log file was {{ 'modified' if log_result.changed else 'already correct' }}"
+        
+    - name: Ensure user exists (idempotent)
+      user:
+        name: testuser2
+        state: present
+        shell: /bin/bash
+        home: /home/testuser2
+        create_home: yes
+      register: user_result
+      
+    - name: Display user creation status
+      debug:
+        msg: "User was {{ 'created' if user_result.changed else 'already present' }}"
+        
+    - name: Ensure package is installed (idempotent)
+      yum:
+        name: tree
+        state: present
+      register: package_result
+      
+    - name: Display package installation status
+      debug:
+        msg: "Package was {{ 'installed' if package_result.changed else 'already installed' }}"
