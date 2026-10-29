@@ -1,0 +1,35 @@
+---
+- name: Variable Precedence Test
+  hosts: all
+  vars:
+    test_var: "playbook_vars"
+    priority_var: "from_playbook"
+  vars_files:
+    - precedence-vars.yml
+  
+  tasks:
+    - name: Show variable values and their sources
+      debug:
+        msg: |
+          test_var: {{ test_var }}
+          priority_var: {{ priority_var }}
+          command_line_var: {{ command_line_var | default('not_set') }}
+    
+    - name: Create precedence demonstration file
+      copy:
+        content: |
+          Variable Precedence Demonstration
+          =================================
+          
+          test_var: {{ test_var }}
+          priority_var: {{ priority_var }}
+          command_line_var: {{ command_line_var | default('not_set') }}
+          
+          Precedence Order (highest to lowest):
+          1. Command line (-e)
+          2. vars_files
+          3. vars section in playbook
+          4. group_vars
+          5. host_vars
+        dest: "/tmp/precedence-test.txt"
+        mode: '0644'

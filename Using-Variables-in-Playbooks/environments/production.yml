@@ -1,0 +1,17 @@
+---
+# Production environment variables
+environment: "production"
+web_port: 80
+debug_enabled: false
+log_level: "warn"
+max_connections: 200
+ssl_enabled: true
+
+database_config:
+  host: "prod-db.local"
+  port: 3306
+  name: "prod_database"
+  user: "prod_user"
+
+backup_retention: 30
+monitoring_enabled: true

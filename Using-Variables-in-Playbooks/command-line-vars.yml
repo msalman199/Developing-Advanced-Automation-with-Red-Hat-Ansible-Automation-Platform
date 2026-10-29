@@ -1,0 +1,38 @@
+---
+- name: Command Line Variables Demo
+  hosts: all
+  vars:
+    # Default values (can be overridden)
+    app_name: "default-app"
+    app_version: "1.0.0"
+    app_port: 3000
+    app_environment: "development"
+    
+  tasks:
+    - name: Display all variables
+      debug:
+        msg: |
+          Application: {{ app_name }}
+          Version: {{ app_version }}
+          Port: {{ app_port }}
+          Environment: {{ app_environment }}
+          
+    - name: Create application configuration
+      copy:
+        content: |
+          [application]
+          name={{ app_name }}
+          version={{ app_version }}
+          port={{ app_port }}
+          environment={{ app_environment }}
+          
+          [runtime]
+          timestamp={{ ansible_date_time.iso8601 }}
+          hostname={{ ansible_hostname }}
+          managed_by=ansible
+        dest: "/tmp/{{ app_name }}-config.ini"
+        mode: '0644'
+    
+    - name: Show configuration file location
+      debug:
+        msg: "Configuration saved to: /tmp/{{ app_name }}-config.ini"

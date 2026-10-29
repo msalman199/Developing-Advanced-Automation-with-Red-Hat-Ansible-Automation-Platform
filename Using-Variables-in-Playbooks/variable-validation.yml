@@ -1,0 +1,63 @@
+---
+- name: Variable Validation and Testing
+  hosts: all
+  vars:
+    required_vars:
+      - app_name
+      - app_version
+      - environment
+    
+    default_config:
+      timeout: 30
+      retries: 3
+      debug: false
+  
+  tasks:
+    - name: Validate required variables are defined
+      fail:
+        msg: "Required variable {{ item }} is not defined"
+      when: vars[item] is not defined
+      loop: "{{ required_vars }}"
+    
+    - name: Show all defined variables
+      debug:
+        msg: |
+          App Name: {{ app_name }}
+          App Version: {{ app_version }}
+          Environment: {{ environment }}
+          Timeout: {{ default_config.timeout }}
+          Retries: {{ default_config.retries }}
+          Debug: {{ default_config.debug }}
+    
+    - name: Test conditional logic based on variables
+      debug:
+        msg: "Running in production mode - extra security enabled"
+      when: environment == "production"
+    
+    - name: Test conditional logic for development
+      debug:
+        msg: "Running in development mode - debug features enabled"
+      when: environment == "development"
+    
+    - name: Create final configuration summary
+      copy:
+        content: |
+          Application Configuration Summary
+          ================================
+          
+          Application: {{ app_name }} v{{ app_version }}
+          Environment: {{ environment }}
+          
+          Configuration:
+          - Timeout: {{ default_config.timeout }} seconds
+          - Retries: {{ default_config.retries }}
+          - Debug Mode: {{ default_config.debug }}
+          
+          System Information:
+          - Hostname: {{ ansible_hostname }}
+          - OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          - Architecture: {{ ansible_architecture }}
+          
+          Generated: {{ ansible_date_time.iso8601 }}
+        dest: "/tmp/final-config-{{ app_name }}.txt"
+        mode: '0644'

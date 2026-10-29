@@ -1,0 +1,23 @@
+---
+# Web server configuration variables
+web_package: "nginx"
+web_service: "nginx"
+web_port: 8080
+web_user: "nginx"
+
+# Site configuration
+site_name: "MyCompany Website"
+site_description: "Welcome to our corporate website"
+
+# File paths
+config_file: "/etc/nginx/nginx.conf"
+log_directory: "/var/log/nginx"
+web_root: "/usr/share/nginx/html"
+
+# Security settings
+ssl_enabled: false
+firewall_rules:
+  - port: 8080
+    protocol: "tcp"
+  - port: 443
+    protocol: "tcp"

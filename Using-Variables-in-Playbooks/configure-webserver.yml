@@ -1,0 +1,121 @@
+
+
+---
+- name: Configure Web Server Using Variables
+  hosts: all
+  become: yes
+  vars:
+    # Service configuration variables
+    web_service: "httpd"
+    web_package: "httpd"
+    web_port: 80
+    web_user: "apache"
+    
+    # Directory variables
+    document_root: "/var/www/html"
+    log_directory: "/var/log/httpd"
+    config_directory: "/etc/httpd/conf.d"
+    
+    # Content variables
+    index_title: "Welcome to {{ ansible_hostname }}"
+    index_content: |
+      <h1>{{ index_title }}</h1>
+      <p>This server is managed by Ansible</p>
+      <p>Server: {{ ansible_hostname }}</p>
+      <p>IP Address: {{ ansible_default_ipv4.address }}</p>
+      <p>Operating System: {{ ansible_distribution }} {{ ansible_distribution_version }}</p>
+    
+    # Configuration template variables
+    server_admin: "webmaster@{{ ansible_domain | default('localhost') }}"
+    server_tokens: "Prod"
+    timeout: 60
+    
+  tasks:
+    - name: Install web server package
+      package:
+        name: "{{ web_package }}"
+        state: present
+    
+    - name: Create document root directory
+      file:
+        path: "{{ document_root }}"
+        state: directory
+        owner: "{{ web_user }}"
+        group: "{{ web_user }}"
+        mode: '0755'
+    
+    - name: Create custom configuration file
+      copy:
+        content: |
+          # Custom Apache Configuration
+          ServerTokens {{ server_tokens }}
+          Timeout {{ timeout }}
+          
+          <VirtualHost *:{{ web_port }}>
+              ServerAdmin {{ server_admin }}
+              DocumentRoot {{ document_root }}
+              ServerName {{ ansible_hostname }}
+              
+              <Directory "{{ document_root }}">
+                  AllowOverride None
+                  Require all granted
+              </Directory>
+              
+              ErrorLog {{ log_directory }}/error.log
+              CustomLog {{ log_directory }}/access.log combined
+          </VirtualHost>
+        dest: "{{ config_directory }}/custom.conf"
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart web service
+    
+    - name: Create index.html with variables
+      copy:
+        content: |
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>{{ index_title }}</title>
+              <style>
+                  body { font-family: Arial, sans-serif; margin: 40px; }
+                  h1 { color: #333; }
+                  .info { background: #f0f0f0; padding: 10px; margin: 10px 0; }
+              </style>
+          </head>
+          <body>
+              {{ index_content }}
+              <div class="info">
+                  <strong>Configuration Details:</strong><br>
+                  Web Service: {{ web_service }}<br>
+                  Port: {{ web_port }}<br>
+                  Document Root: {{ document_root }}<br>
+                  Server Admin: {{ server_admin }}
+              </div>
+          </body>
+          </html>
+        dest: "{{ document_root }}/index.html"
+        owner: "{{ web_user }}"
+        group: "{{ web_user }}"
+        mode: '0644'
+    
+    - name: Start and enable web service
+      service:
+        name: "{{ web_service }}"
+        state: started
+        enabled: yes
+    
+    - name: Open firewall port
+      firewalld:
+        port: "{{ web_port }}/tcp"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      ignore_errors: yes
+  
+  handlers:
+    - name: restart web service
+      service:
+        name: "{{ web_service }}"
+        state: restarted
+

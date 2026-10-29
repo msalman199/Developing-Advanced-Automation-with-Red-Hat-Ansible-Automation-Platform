@@ -1,0 +1,12 @@
+---
+# Web server specific variables
+http_port: 80
+https_port: 443
+max_clients: 200
+
+web_packages:
+  - httpd
+  - mod_ssl
+  - php
+
+document_root: "/var/www/html"

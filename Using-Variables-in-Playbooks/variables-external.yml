@@ -1,0 +1,19 @@
+---
+- name: Using External Variables
+  hosts: all
+  vars_files:
+    - web-vars.yml
+  
+  tasks:
+    - name: Show web package variable
+      debug:
+        msg: "Web server package: {{ web_package }}"
+    
+    - name: Show site information
+      debug:
+        msg: "Site: {{ site_name }} - {{ site_description }}"
+    
+    - name: Display firewall rules
+      debug:
+        msg: "Rule: Port {{ item.port }}/{{ item.protocol }}"
+      loop: "{{ firewall_rules }}"

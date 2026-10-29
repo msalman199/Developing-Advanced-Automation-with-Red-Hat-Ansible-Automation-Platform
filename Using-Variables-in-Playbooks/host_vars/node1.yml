@@ -1,0 +1,9 @@
+---
+# Host-specific variables for node1
+server_role: "primary"
+backup_enabled: true
+memory_limit: "2G"
+custom_config:
+  max_upload_size: "50M"
+  session_timeout: 1800
+
