@@ -1,0 +1,28 @@
+---
+# defaults file for webserver
+webserver_package: httpd
+webserver_service: httpd
+webserver_port: 80
+webserver_document_root: /var/www/html
+webserver_index_file: index.html
+webserver_user: apache
+webserver_group: apache
+
+# Configuration options
+webserver_enable_ssl: false
+webserver_ssl_port: 443
+webserver_max_connections: 100
+
+# Custom content
+webserver_custom_content: |
+  <html>
+  <head>
+    <title>Welcome to Our Web Server</title>
+  </head>
+  <body>
+    <h1>Hello from Ansible Role!</h1>
+    <p>This page was deployed using an Ansible role.</p>
+    <p>Server configured on port {{ webserver_port }}</p>
+  </body>
+  </html>---
+# defaults file for webserver

@@ -1,0 +1,53 @@
+---
+- name: Deploy Web Servers Across Multiple Environments
+  hosts: webservers
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    environments:
+      development:
+        webserver_port: 8080
+        webserver_max_connections: 50
+      staging:
+        webserver_port: 8081
+        webserver_max_connections: 75
+      production:
+        webserver_port: 80
+        webserver_max_connections: 200
+
+  pre_tasks:
+    - name: Update package cache
+      package:
+        update_cache: yes
+      when: ansible_os_family == "RedHat"
+
+    - name: Ensure required packages are installed
+      package:
+        name:
+          - firewalld
+          - python3-firewall
+        state: present
+
+  roles:
+    - role: webserver
+      vars:
+        webserver_port: "{{ environments[deployment_env | default('development')].webserver_port }}"
+        webserver_max_connections: "{{ environments[deployment_env | default('development')].webserver_max_connections }}"
+
+  post_tasks:
+    - name: Verify web server is responding
+      uri:
+        url: "http://{{ ansible_default_ipv4.address }}:{{ webserver_port }}"
+        method: GET
+        status_code: 200
+      register: web_response
+      retries: 3
+      delay: 5
+
+    - name: Display verification results
+      debug:
+        msg:
+          - "Web server verification: {{ 'SUCCESS' if web_response.status == 200 else 'FAILED' }}"
+          - "Response time: {{ web_response.elapsed }} seconds"
+          - "Environment: {{ deployment_env | default('development') }}"
