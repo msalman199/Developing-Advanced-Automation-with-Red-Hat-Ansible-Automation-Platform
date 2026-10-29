@@ -1,0 +1,416 @@
+Lab 1: Introduction to Ansible Playbooks
+Objectives
+
+By the end of this lab, students will be able to:
+
+    Understand the fundamental structure and syntax of Ansible playbooks
+    Create a basic playbook to automate package installation
+    Execute playbooks using the ansible-playbook command
+    Verify successful playbook execution and troubleshoot common issues
+    Comprehend the relationship between inventory, playbooks, and target hosts
+    Apply best practices for playbook organization and documentation
+
+Prerequisites
+
+Before starting this lab, students should have:
+
+    Basic understanding of Linux command line operations
+    Familiarity with YAML syntax and structure
+    Knowledge of SSH connectivity concepts
+    Understanding of package management in Linux distributions
+    Basic networking concepts (IP addresses, hostnames)
+
+Note: Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment - no need to build your own virtual machines.
+Lab Environment Setup
+Ready-to-Use Cloud Machines
+
+Your lab environment includes:
+
+    Control Node: CentOS/RHEL 8 machine with Ansible pre-installed
+    Managed Node: Ubuntu 20.04 LTS target machine
+    Pre-configured SSH key authentication between nodes
+    Network connectivity established between all machines
+
+Accessing Your Environment
+
+    Click Start Lab to initialize your cloud environment
+    Wait for the environment status to show Ready
+    Access the control node via the provided terminal interface
+    Verify connectivity to managed nodes
+
+Task 1: Understanding Ansible Playbook Structure
+Subtask 1.1: Explore the Lab Environment
+
+First, let's familiarize ourselves with the environment and verify Ansible installation.
+
+    Connect to the control node and verify Ansible installation:
+
+ansible --version
+
+Expected output should show Ansible version 2.9 or higher.
+
+    Check the inventory file to see available managed nodes:
+
+cat /etc/ansible/hosts
+
+    Test connectivity to managed nodes:
+
+ansible all -m ping
+
+Subtask 1.2: Examine Playbook Components
+
+Create a working directory for your playbooks:
+
+mkdir ~/ansible-lab
+cd ~/ansible-lab
+
+Let's understand the basic structure of an Ansible playbook by examining each component:
+
+Playbook Structure Overview:
+
+    Hosts: Defines target machines
+    Tasks: Specific actions to perform
+    Modules: Ansible components that perform actual work
+    Variables: Dynamic values used throughout playbooks
+    Handlers: Tasks triggered by other tasks
+
+Task 2: Create a Simple Package Installation Playbook
+Subtask 2.1: Create the Basic Playbook Structure
+
+Create your first playbook to install the htop package on managed nodes.
+
+    Create a new playbook file:
+
+nano install-package.yml
+
+    Add the following content to create a basic playbook structure:
+
+---
+- name: Install htop package on managed nodes
+  hosts: all
+  become: yes
+  become_method: sudo
+  
+  tasks:
+    - name: Update package cache (Ubuntu/Debian)
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+      
+    - name: Update package cache (CentOS/RHEL)
+      yum:
+        update_cache: yes
+      when: ansible_os_family == "RedHat"
+      
+    - name: Install htop package on Ubuntu/Debian systems
+      apt:
+        name: htop
+        state: present
+      when: ansible_os_family == "Debian"
+      
+    - name: Install htop package on CentOS/RHEL systems
+      yum:
+        name: htop
+        state: present
+      when: ansible_os_family == "RedHat"
+      
+    - name: Verify htop installation
+      command: which htop
+      register: htop_path
+      changed_when: false
+      
+    - name: Display htop installation path
+      debug:
+        msg: "htop is installed at: {{ htop_path.stdout }}"
+
+    Save and exit the file (Ctrl+X, then Y, then Enter in nano).
+
+Subtask 2.2: Understanding Playbook Components
+
+Let's break down each section of our playbook:
+
+Header Section:
+
+    ---: YAML document start marker
+    name: Human-readable description of the playbook
+    hosts: Specifies target machines (all means all hosts in inventory)
+    become: Enables privilege escalation (sudo)
+
+Tasks Section:
+
+    Each task has a descriptive name
+    Uses specific modules (apt, yum, command, debug)
+    Includes conditional statements with when
+    Uses variables like ansible_os_family
+
+Subtask 2.3: Create an Enhanced Playbook with Variables
+
+Create a more advanced version using variables:
+
+nano install-package-advanced.yml
+
+Add the following content:
+
+---
+- name: Install packages using variables and loops
+  hosts: all
+  become: yes
+  vars:
+    packages_to_install:
+      - htop
+      - curl
+      - wget
+      - tree
+    
+  tasks:
+    - name: Update package cache (Ubuntu/Debian)
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+      
+    - name: Update package cache (CentOS/RHEL)
+      yum:
+        update_cache: yes
+      when: ansible_os_family == "RedHat"
+      
+    - name: Install packages on Ubuntu/Debian systems
+      apt:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ packages_to_install }}"
+      when: ansible_os_family == "Debian"
+      
+    - name: Install packages on CentOS/RHEL systems
+      yum:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ packages_to_install }}"
+      when: ansible_os_family == "RedHat"
+      
+    - name: Create a simple report file
+      copy:
+        content: |
+          Package Installation Report
+          ==========================
+          Date: {{ ansible_date_time.date }}
+          Time: {{ ansible_date_time.time }}
+          Host: {{ ansible_hostname }}
+          OS Family: {{ ansible_os_family }}
+          Packages Installed: {{ packages_to_install | join(', ') }}
+        dest: /tmp/installation_report.txt
+        mode: '0644'
+      
+    - name: Display installation summary
+      debug:
+        msg: "Successfully installed {{ packages_to_install | length }} packages on {{ ansible_hostname }}"
+
+Task 3: Run the Playbook and Verify Execution
+Subtask 3.1: Execute the Basic Playbook
+
+    Run the first playbook with verbose output:
+
+ansible-playbook -v install-package.yml
+
+    Analyze the output and look for:
+        PLAY RECAP: Shows success/failure status for each host
+        changed: Number of tasks that made changes
+        ok: Number of tasks that completed successfully
+        unreachable: Number of hosts that couldn't be reached
+        failed: Number of failed tasks
+
+Subtask 3.2: Execute the Advanced Playbook
+
+    Run the advanced playbook with increased verbosity:
+
+ansible-playbook -vv install-package-advanced.yml
+
+    Monitor the execution and observe:
+        Variable substitution in action
+        Loop execution for multiple packages
+        Conditional task execution based on OS family
+
+Subtask 3.3: Verify Installation Success
+
+    Check installed packages on managed nodes:
+
+ansible all -m command -a "htop --version"
+
+    Verify the report file was created:
+
+ansible all -m command -a "cat /tmp/installation_report.txt"
+
+    List all installed packages from our playbook:
+
+ansible all -m shell -a "dpkg -l | grep -E 'htop|curl|wget|tree'" --become
+
+Task 4: Playbook Execution Verification and Troubleshooting
+Subtask 4.1: Implement Dry Run Testing
+
+Before making changes, always test with dry run mode:
+
+    Execute a dry run to see what would happen:
+
+ansible-playbook --check install-package-advanced.yml
+
+    Compare dry run output with actual execution results.
+
+Subtask 4.2: Create a Verification Playbook
+
+Create a separate playbook to verify installations:
+
+nano verify-installation.yml
+
+Add the following content:
+
+---
+- name: Verify package installations
+  hosts: all
+  become: yes
+  vars:
+    expected_packages:
+      - htop
+      - curl
+      - wget
+      - tree
+      
+  tasks:
+    - name: Check if packages are installed (Ubuntu/Debian)
+      command: dpkg -l {{ item }}
+      register: package_check_deb
+      loop: "{{ expected_packages }}"
+      when: ansible_os_family == "Debian"
+      failed_when: package_check_deb.rc != 0
+      changed_when: false
+      
+    - name: Check if packages are installed (CentOS/RHEL)
+      command: rpm -q {{ item }}
+      register: package_check_rpm
+      loop: "{{ expected_packages }}"
+      when: ansible_os_family == "RedHat"
+      failed_when: package_check_rpm.rc != 0
+      changed_when: false
+      
+    - name: Verify htop functionality
+      command: htop --version
+      register: htop_version
+      changed_when: false
+      
+    - name: Display verification results
+      debug:
+        msg: "All packages verified successfully. htop version: {{ htop_version.stdout }}"
+
+    Run the verification playbook:
+
+ansible-playbook verify-installation.yml
+
+Subtask 4.3: Common Troubleshooting Scenarios
+
+Issue 1: SSH Connection Problems
+
+If you encounter SSH connectivity issues:
+
+# Test SSH connectivity manually
+ssh -i ~/.ssh/id_rsa user@managed_node_ip
+
+# Check SSH key permissions
+ls -la ~/.ssh/
+chmod 600 ~/.ssh/id_rsa
+
+Issue 2: Permission Denied Errors
+
+If you get permission errors:
+
+# Verify sudo access on managed nodes
+ansible all -m command -a "sudo whoami"
+
+# Check if become is properly configured
+ansible-playbook install-package.yml --ask-become-pass
+
+Issue 3: Package Not Found Errors
+
+If packages aren't found:
+
+# Update package cache manually
+ansible all -m apt -a "update_cache=yes" --become
+ansible all -m yum -a "update_cache=yes" --become
+
+Advanced Concepts and Best Practices
+Playbook Organization
+
+Create a more structured approach:
+
+mkdir -p ~/ansible-lab/group_vars
+mkdir -p ~/ansible-lab/host_vars
+mkdir -p ~/ansible-lab/roles
+
+Using Tags for Selective Execution
+
+Modify your playbook to include tags:
+
+- name: Install packages on Ubuntu/Debian systems
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ packages_to_install }}"
+  when: ansible_os_family == "Debian"
+  tags:
+    - packages
+    - debian
+
+Run specific tagged tasks:
+
+ansible-playbook install-package-advanced.yml --tags "packages"
+
+Error Handling and Recovery
+
+Add error handling to your playbooks:
+
+- name: Install package with error handling
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ packages_to_install }}"
+  register: install_result
+  ignore_errors: yes
+  
+- name: Report failed installations
+  debug:
+    msg: "Failed to install: {{ item.item }}"
+  loop: "{{ install_result.results }}"
+  when: item.failed is defined and item.failed
+
+Conclusion
+
+In this lab, you have successfully:
+
+    Created your first Ansible playbooks using proper YAML syntax and structure
+    Implemented package installation automation across different Linux distributions
+    Executed playbooks and interpreted their output for success verification
+    Applied conditional logic to handle different operating systems
+    Used variables and loops to make playbooks more flexible and maintainable
+    Implemented verification procedures to ensure desired state achievement
+    Learned troubleshooting techniques for common playbook execution issues
+
+Key Takeaways
+
+Why This Matters:
+
+    Automation Efficiency: Playbooks eliminate manual, repetitive tasks across multiple systems
+    Consistency: Ensures identical configurations across all managed nodes
+    Scalability: Can manage hundreds or thousands of systems simultaneously
+    Documentation: Playbooks serve as living documentation of your infrastructure
+    Version Control: YAML files can be stored in Git for change tracking and collaboration
+
+Next Steps
+
+To continue your Ansible journey:
+
+    Explore Ansible roles for better playbook organization
+    Learn about Ansible Vault for sensitive data management
+    Practice with more complex modules like template and file
+    Implement handlers for service management
+    Study Ansible Galaxy for community-contributed roles
+
+This foundational knowledge prepares you for the Red Hat Ansible Automation Platform certification and real-world automation scenarios where infrastructure as code principles drive modern IT operations.
