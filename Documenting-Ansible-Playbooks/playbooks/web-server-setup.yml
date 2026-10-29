@@ -1,0 +1,74 @@
+---
+# =============================================================================
+# Web Server Sandbox Setup Playbook
+# =============================================================================
+#
+# PLAYBOOK INFORMATION:
+# Name: web-server-setup.yml
+# Purpose: Demonstrate documentation best practices using a safe, local
+#          sandbox that creates a document root and renders an index page.
+# Author: Infrastructure Automation Team (student exercise)
+# Version: 1.0.0
+#
+# DESCRIPTION:
+# This playbook performs the following steps:
+# - Displays host facts relevant to the configuration
+# - Creates a local sandbox document root directory
+# - Renders a documented Jinja2 template into that directory
+# - Reports a summary of what was configured
+#
+# REQUIREMENTS:
+# - Runs against localhost using the "local" connection plugin
+# - No sudo privileges required
+# - No external network access required
+#
+# USAGE:
+# ansible-playbook -i inventory/hosts.yml playbooks/web-server-setup.yml
+#
+# TAGS AVAILABLE:
+# - facts:   Display host information
+# - setup:   Directory creation tasks
+# - content: Template rendering tasks
+# - report:  Summary reporting tasks
+# =============================================================================
+
+- name: "Documented Web Server Sandbox Setup"
+  hosts: webservers
+  become: false
+  gather_facts: true
+
+  pre_tasks:
+    - name: "FACTS | Display target host information"
+      debug:
+        msg: |
+          Configuring sandbox on: {{ inventory_hostname }}
+          Operating System: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Architecture: {{ ansible_architecture }}
+      tags: ['facts']
+
+  tasks:
+    - name: "SETUP | Create local sandbox document root"
+      file:
+        path: "{{ web_content.document_root }}"
+        state: directory
+        mode: '0755'
+      tags: ['setup']
+
+    - name: "CONTENT | Render documented index page from template"
+      template:
+        src: "index.html.j2"
+        dest: "{{ web_content.document_root }}/{{ web_content.index_file }}"
+        mode: '0644'
+      tags: ['content']
+
+  post_tasks:
+    - name: "REPORT | Display configuration summary"
+      debug:
+        msg: |
+          Sandbox Configuration Complete!
+          ================================
+          Host: {{ inventory_hostname }}
+          Document Root: {{ web_content.document_root }}
+          Index File: {{ web_content.index_file }}
+          Service Name (reference only): {{ web_service.name }}
+      tags: ['report']

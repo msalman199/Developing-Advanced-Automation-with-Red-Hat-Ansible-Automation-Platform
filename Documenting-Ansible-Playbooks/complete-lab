@@ -1,0 +1,468 @@
+Lab 5: Documenting Ansible Playbooks
+Objectives
+
+By the end of this lab, students will be able to:
+
+    Implement comprehensive documentation strategies for Ansible playbooks
+    Add meaningful comments and descriptions to playbook components
+    Create clear explanations for tasks, roles, and variables
+    Apply industry best practices for playbook documentation
+    Produce role-level README documentation that supports maintainability in team environments
+
+Prerequisites
+
+Before starting this lab, students should have:
+
+    Basic understanding of Ansible concepts (playbooks, tasks, roles, variables)
+    Familiarity with YAML syntax and structure
+    Experience writing basic Ansible playbooks
+    Knowledge of Linux command line operations
+
+Ansible must be installed in your lab environment. If it is not already present, install it with:
+
+sudo apt-get update && sudo apt-get install -y ansible
+
+or, on RHEL/CentOS-based systems:
+
+sudo yum install -y ansible
+
+Verify the installation:
+
+ansible --version
+
+You should see version output similar to ansible [core 2.14.x] or later.
+Lab Environment
+
+This lab uses a self-contained local project directory â�� no remote hosts are required. All tasks run against the local Ansible controller using localhost, so you can complete the entire lab safely in an isolated practice environment.
+
+Create your working directory now:
+
+mkdir -p ~/ansible-doc-lab
+cd ~/ansible-doc-lab
+
+Task 1: Build a Documented Inventory and Variables File
+Step 1.1: Create a documented inventory
+
+Create the project structure:
+
+mkdir -p documentation-lab/{playbooks,roles,group_vars,inventory,templates}
+cd documentation-lab
+
+Create an inventory file with header comments explaining ownership and purpose:
+
+cat > inventory/hosts.yml << 'EOF'
+---
+# =============================================================================
+# Lab Inventory File
+# =============================================================================
+# Purpose: Local practice inventory for the documentation lab.
+# Maintainer: Infrastructure Automation Team (student exercise)
+# Notes: All tasks target localhost so the lab is safe to run without
+#        provisioning real remote servers.
+# =============================================================================
+
+all:
+  children:
+    webservers:
+      hosts:
+        localhost:
+          ansible_connection: local
+      vars:
+        # Web server specific variables consumed by group_vars/webservers.yml
+        http_port: 80
+        https_port: 443
+        document_root: /tmp/ansible-doc-lab/www
+EOF
+
+Step 1.2: Create a documented group_vars file
+
+cat > group_vars/webservers.yml << 'EOF'
+---
+# =============================================================================
+# Web Servers Group Variables
+# =============================================================================
+# Purpose: Configuration variables for all hosts in the webservers group.
+# Author: Infrastructure Automation Team (student exercise)
+# Dependencies: Consumed by playbooks/web-server-setup.yml
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Web Server Configuration
+# -----------------------------------------------------------------------------
+
+# Primary web service configuration.
+# NOTE: this lab does not install a real web server package; the service
+# name is documented here for reference only and is not started.
+web_service:
+  name: "apache2"                 # Service name (apache2 on Debian/Ubuntu, httpd on RHEL)
+  state: "stopped"                # Kept stopped in this lab - no package is installed
+  enabled: false                  # Not enabled at boot for this exercise
+
+# HTTP/HTTPS port configuration used by the sample playbook and templates
+ports:
+  http: 80                        # Standard HTTP port
+  https: 443                      # Standard HTTPS port
+
+# Document root and web content settings
+web_content:
+  document_root: "/tmp/ansible-doc-lab/www"   # Local sandbox directory, not a system path
+  index_file: "index.html"                    # Default index file name
+
+# -----------------------------------------------------------------------------
+# Security Configuration (documented for reference; not applied in this lab)
+# -----------------------------------------------------------------------------
+
+# Firewall rules that a production playbook would apply
+firewall_rules:
+  - port: "{{ ports.http }}"
+    protocol: "tcp"
+    comment: "Allow HTTP traffic"
+  - port: "{{ ports.https }}"
+    protocol: "tcp"
+    comment: "Allow HTTPS traffic"
+EOF
+
+Deliverable: inventory/hosts.yml and group_vars/webservers.yml exist and both use header comment blocks describing purpose, author, and dependencies. Verify with:
+
+ansible-inventory -i inventory/hosts.yml --list
+
+Expected result: a JSON structure showing the webservers group with localhost as a member and the http_port/https_port/document_root variables present under _meta or group vars output, with no YAML syntax errors reported.
+Task 2: Create a Fully Documented Playbook
+Step 2.1: Write the main playbook
+
+Create playbooks/web-server-setup.yml. This playbook is intentionally scoped to safe, local actions (creating a sandbox directory and rendering a template) so it can run without root privileges or a real web server installed.
+
+cat > playbooks/web-server-setup.yml << 'EOF'
+---
+# =============================================================================
+# Web Server Sandbox Setup Playbook
+# =============================================================================
+#
+# PLAYBOOK INFORMATION:
+# Name: web-server-setup.yml
+# Purpose: Demonstrate documentation best practices using a safe, local
+#          sandbox that creates a document root and renders an index page.
+# Author: Infrastructure Automation Team (student exercise)
+# Version: 1.0.0
+#
+# DESCRIPTION:
+# This playbook performs the following steps:
+# - Displays host facts relevant to the configuration
+# - Creates a local sandbox document root directory
+# - Renders a documented Jinja2 template into that directory
+# - Reports a summary of what was configured
+#
+# REQUIREMENTS:
+# - Runs against localhost using the "local" connection plugin
+# - No sudo privileges required
+# - No external network access required
+#
+# USAGE:
+# ansible-playbook -i inventory/hosts.yml playbooks/web-server-setup.yml
+#
+# TAGS AVAILABLE:
+# - facts:   Display host information
+# - setup:   Directory creation tasks
+# - content: Template rendering tasks
+# - report:  Summary reporting tasks
+# =============================================================================
+
+- name: "Documented Web Server Sandbox Setup"
+  hosts: webservers
+  become: false
+  gather_facts: true
+
+  pre_tasks:
+    - name: "FACTS | Display target host information"
+      debug:
+        msg: |
+          Configuring sandbox on: {{ inventory_hostname }}
+          Operating System: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Architecture: {{ ansible_architecture }}
+      tags: ['facts']
+
+  tasks:
+    - name: "SETUP | Create local sandbox document root"
+      file:
+        path: "{{ web_content.document_root }}"
+        state: directory
+        mode: '0755'
+      tags: ['setup']
+
+    - name: "CONTENT | Render documented index page from template"
+      template:
+        src: "index.html.j2"
+        dest: "{{ web_content.document_root }}/{{ web_content.index_file }}"
+        mode: '0644'
+      tags: ['content']
+
+  post_tasks:
+    - name: "REPORT | Display configuration summary"
+      debug:
+        msg: |
+          Sandbox Configuration Complete!
+          ================================
+          Host: {{ inventory_hostname }}
+          Document Root: {{ web_content.document_root }}
+          Index File: {{ web_content.index_file }}
+          Service Name (reference only): {{ web_service.name }}
+      tags: ['report']
+EOF
+
+Step 2.2: Create the supporting documented template
+
+cat > templates/index.html.j2 << 'EOF'
+<!DOCTYPE html>
+<!--
+    Template: index.html.j2
+    Purpose: Default landing page rendered by web-server-setup.yml
+    Generated: {{ ansible_date_time.iso8601 }}
+    Host: {{ inventory_hostname }}
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ inventory_hostname }} - Ansible Documentation Lab</title>
+</head>
+<body>
+    <h1>Welcome to {{ inventory_hostname }}</h1>
+    <ul>
+        <li>Operating System: {{ ansible_distribution }} {{ ansible_distribution_version }}</li>
+        <li>Document Root: {{ web_content.document_root }}</li>
+        <li>Rendered: {{ ansible_date_time.date }} {{ ansible_date_time.time }}</li>
+    </ul>
+    <p><em>Deployed via Ansible for documentation practice.</em></p>
+</body>
+</html>
+EOF
+
+Step 2.3: Run and validate the playbook
+
+Check the syntax first, then run it:
+
+ansible-playbook -i inventory/hosts.yml playbooks/web-server-setup.yml --syntax-check
+ansible-playbook -i inventory/hosts.yml playbooks/web-server-setup.yml
+
+Deliverable: The playbook run completes with failed=0 in the final PLAY RECAP line, and the rendered file exists:
+
+cat /tmp/ansible-doc-lab/www/index.html
+
+Expected result: valid HTML output showing the host's distribution name, document root, and a rendered timestamp â�� confirming the documented template variables resolved correctly.
+Task 3: Create and Document an Ansible Role
+Step 3.1: Scaffold the role
+
+ansible-galaxy init roles/webserver
+
+This creates the standard role skeleton (tasks/, defaults/, handlers/, meta/, templates/, vars/, files/, tests/).
+Step 3.2: Document the role's tasks and defaults
+
+cat > roles/webserver/tasks/main.yml << 'EOF'
+---
+# =============================================================================
+# Web Server Role - Main Tasks
+# =============================================================================
+# Role: webserver
+# File: tasks/main.yml
+# Purpose: Entry point for the role. Creates a documented sandbox web root
+#          and reports the resulting configuration. Intentionally avoids
+#          package installation so the role is safe to run anywhere.
+# =============================================================================
+
+- name: "WEBSERVER | Ensure sandbox document root exists"
+  file:
+    path: "{{ webserver_document_root }}"
+    state: directory
+    mode: '0755'
+  tags: ['webserver', 'setup']
+
+- name: "WEBSERVER | Render sandbox index page"
+  template:
+    src: "index.html.j2"
+    dest: "{{ webserver_document_root }}/index.html"
+    mode: '0644'
+  tags: ['webserver', 'content']
+
+- name: "WEBSERVER | Report role configuration"
+  debug:
+    msg: |
+      Role 'webserver' applied to {{ inventory_hostname }}
+      Document root: {{ webserver_document_root }}
+      Service name (reference only): {{ webserver_service_name }}
+  tags: ['webserver', 'report']
+EOF
+
+cat > roles/webserver/defaults/main.yml << 'EOF'
+---
+# =============================================================================
+# Web Server Role - Default Variables
+# =============================================================================
+# Role: webserver
+# File: defaults/main.yml
+# Purpose: Sensible defaults for the role. Override in group_vars, host_vars,
+#          or playbook vars as needed.
+# =============================================================================
+
+# Local sandbox document root used by tasks/main.yml
+webserver_document_root: "/tmp/ansible-doc-lab/role-www"
+
+# Reference-only service name (not started by this role)
+webserver_service_name: "apache2"
+
+# Standard ports documented for future expansion of this role
+webserver_ports:
+  http: 80
+  https: 443
+EOF
+
+cat > roles/webserver/templates/index.html.j2 << 'EOF'
+<!DOCTYPE html>
+<!--
+    Template: index.html.j2
+    Purpose: Sandbox index page rendered by the webserver role
+    Host: {{ inventory_hostname }}
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ inventory_hostname }} - webserver role</title>
+</head>
+<body>
+    <h1>webserver role output</h1>
+    <p>Document root: {{ webserver_document_root }}</p>
+</body>
+</html>
+EOF
+
+cat > roles/webserver/meta/main.yml << 'EOF'
+---
+# =============================================================================
+# Web Server Role - Metadata
+# =============================================================================
+galaxy_info:
+  role_name: webserver
+  author: Infrastructure Automation Team (student exercise)
+  description: Sandbox role demonstrating documentation best practices for Ansible roles
+  license: MIT
+  min_ansible_version: 2.9
+  platforms:
+    - name: Ubuntu
+      versions:
+        - 20.04
+        - 22.04
+    - name: EL
+      versions:
+        - 8
+        - 9
+
+dependencies: []
+EOF
+
+Step 3.3: Create Role Documentation
+
+Create a complete README.md for the role describing its purpose, variables, and usage:
+
+cat > roles/webserver/README.md << 'EOF'
+# Web Server Role (Sandbox)
+
+## Overview
+
+This Ansible role demonstrates documentation best practices for a reusable
+role. It creates a local sandbox document root and renders a documented
+Jinja2 template into it. It intentionally does not install real web server
+packages or manage system services, making it safe to run repeatedly in any
+practice environment.
+
+## Requirements
+
+- Ansible 2.9 or later
+- No special privileges required (role does not use `become`)
+- No external network access required
+
+## Role Variables
+
+Defaults are defined in `defaults/main.yml`:
+
+| Variable                  | Default                          | Description                                  |
+|---------------------------|-----------------------------------|-----------------------------------------------|
+| `webserver_document_root` | `/tmp/ansible-doc-lab/role-www`  | Local sandbox directory rendered content goes into |
+| `webserver_service_name`  | `apache2`                        | Reference-only value; not started by this role |
+| `webserver_ports.http`    | `80`                              | Documented HTTP port for future expansion     |
+| `webserver_ports.https`   | `443`                             | Documented HTTPS port for future expansion    |
+
+## Dependencies
+
+None. This role has no dependencies on other roles or collections.
+
+## Example Playbook
+
+```yaml
+---
+- name: "Apply webserver sandbox role"
+  hosts: webservers
+  become: false
+  roles:
+    - role: webserver
+      vars:
+        webserver_document_root: "/tmp/ansible-doc-lab/custom-www"
+
+Testing This Role
+
+Run a syntax check and a local execution to validate the role in isolation:
+
+ansible-playbook -i inventory/hosts.yml playbooks/test-webserver-role.yml --syntax-check
+ansible-playbook -i inventory/hosts.yml playbooks/test-webserver-role.yml
+
+After running, confirm the rendered file exists and contains the expected host information:
+
+cat /tmp/ansible-doc-lab/role-www/index.html
+
+License
+
+MIT
+Author Information
+
+Created by the Infrastructure Automation Team as part of an Ansible documentation training exercise. EOF
+
+
+### Step 3.4: Create a test playbook and validate the role
+
+```bash
+cat > playbooks/test-webserver-role.yml << 'EOF'
+---
+# =============================================================================
+# Role Test Playbook
+# =============================================================================
+# Purpose: Exercise the webserver role in isolation to validate that its
+#          documented defaults and tasks behave as described in
+#          roles/webserver/README.md
+# =============================================================================
+
+- name: "Test the webserver role"
+  hosts: webservers
+  become: false
+  gather_facts: true
+  roles:
+    - role: webserver
+EOF
+
+Run the syntax check and then the playbook, exactly as documented in the role's README:
+
+ansible-playbook -i inventory/hosts.yml playbooks/test-webserver-role.yml --syntax-check
+ansible-playbook -i inventory/hosts.yml playbooks/test-webserver-role.yml
+cat /tmp/ansible-doc-lab/role-www/index.html
+
+Deliverable: roles/webserver/README.md exists with Overview, Requirements, Role Variables, Dependencies, Example Playbook, Testing, License, and Author Information sections. The test playbook run reports failed=0 in the PLAY RECAP, and role-www/index.html contains the rendered hostname and document root path, confirming the README's documented behavior matches the actual role output.
+Expected Outcomes
+
+    A documentation-lab project directory containing a documented inventory, group_vars file, playbook, and templates that all run successfully with failed=0
+    A fully scaffolded and documented webserver role whose README accurately describes its variables, usage, and test procedure
+    Working familiarity with header-comment conventions, inline task descriptions, and README structure for Ansible roles
+
+Troubleshooting
+
+Issue 1: ansible-playbook reports "ERROR! the field 'hosts' has an invalid value" Diagnostic hint: check that inventory/hosts.yml is passed correctly with -i and that the group name in the playbook's hosts: key matches the group name in the inventory file exactly (case-sensitive).
+
+Issue 2: Template rendering fails with "'web_content' is undefined" or similar variable errors Diagnostic hint: confirm you are running the playbook from inside the documentation-lab directory so Ansible's default group_vars/ relative path resolves, and check ansible-inventory -i inventory/hosts.yml --list to confirm the variable is actually attached to the webservers group.
+Conclusion
+
+In this lab, you built a small but complete Ansible project demonstrating documentation best practices at every level of the automation stack: an annotated inventory and group variables file, a fully commented playbook with tagged tasks and pre/post-task reporting, and a self-contained role with defaults, tasks, a template, and a complete README describing its variables, dependencies, and test procedure. You verified each artifact by actually running it, rather than just writing comments, which reinforced the principle that good documentation must stay synchronized with working code. Going forward, consider exploring ansible-doc, molecule for role testing, and automated linting with ansible-lint to further enforce documentation and quality standards in larger automation codebases.
