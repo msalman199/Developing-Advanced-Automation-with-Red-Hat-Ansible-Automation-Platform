@@ -1,0 +1,350 @@
+Lab 8: Running Playbooks with Automation Controller
+Objectives
+
+By the end of this lab, you will be able to:
+
+    Navigate the Automation Controller web interface effectively
+    Create and configure job templates in Automation Controller
+    Execute job templates and understand their components
+    Monitor job execution status and review job outputs
+    Troubleshoot common job execution issues
+    Understand the relationship between playbooks, inventories, and job templates
+
+Prerequisites
+
+Before starting this lab, you should have:
+
+    Basic understanding of Ansible playbooks and YAML syntax
+    Familiarity with Linux command line operations
+    Knowledge of SSH key authentication
+    Understanding of inventory concepts in Ansible
+    Completed previous labs covering Ansible fundamentals
+    Access to a web browser for the Automation Controller interface
+
+Lab Environment
+
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment. No need to build your own virtual machines or install software.
+
+Your lab environment includes:
+
+    Automation Controller (AWX) pre-installed and configured
+    Sample inventory with managed nodes
+    Pre-existing project with sample playbooks
+    All necessary authentication configured
+
+Task 1: Create a Job Template in Automation Controller
+Subtask 1.1: Access the Automation Controller Interface
+
+    Open your web browser and navigate to the Automation Controller URL provided in your lab environment.
+
+    Log in using the credentials provided:
+        Username: admin
+        Password: password123
+
+    Verify successful login by confirming you can see the Automation Controller dashboard with navigation menu on the left side.
+
+Subtask 1.2: Explore the Dashboard
+
+    Review the dashboard components:
+        Recent Jobs: Shows recently executed jobs
+        Job Status: Displays success/failure statistics
+        Hosts: Shows managed node status
+        Inventories: Lists available inventories
+
+    Navigate through the main menu items:
+        Click on Templates in the left navigation
+        Click on Projects to see available projects
+        Click on Inventories to view managed hosts
+        Click on Credentials to see authentication methods
+
+Subtask 1.3: Verify Prerequisites for Job Template
+
+    Check available projects:
+        Navigate to Projects in the left menu
+        Verify that Demo Project exists and shows Successful status
+        If the project shows Pending or Failed, click the Sync button
+
+    Verify inventory exists:
+        Navigate to Inventories in the left menu
+        Confirm Demo Inventory is present
+        Click on Demo Inventory and then Hosts tab
+        Verify at least one host is listed and shows Successful status
+
+    Check credentials:
+        Navigate to Credentials in the left menu
+        Verify Demo Credential exists with Machine credential type
+
+Subtask 1.4: Create Your First Job Template
+
+    Navigate to Templates:
+        Click Templates in the left navigation menu
+        Click the Add button (plus icon)
+        Select Add job template from the dropdown
+
+    Configure basic template settings:
+
+    Name: My First Web Server Setup
+    Description: Deploy and configure Apache web server
+    Job Type: Run
+
+    Configure inventory and project:
+
+    Inventory: Demo Inventory
+    Project: Demo Project
+    Playbook: hello_world.yml
+
+    Configure credentials and execution:
+
+    Credentials: Demo Credential
+    Verbosity: 0 (Normal)
+    Instance Groups: default
+
+    Configure advanced options:
+        Check Enable Privilege Escalation
+        Check Enable Provisioning Callbacks (optional)
+        Leave Concurrent Jobs at default value
+
+    Save the template:
+        Click Save button at the bottom
+        Verify the template appears in the Templates list
+
+Subtask 1.5: Create a More Complex Job Template
+
+    Create a second job template for system updates:
+        Click Add → Add job template
+        Configure the following settings:
+
+    Name: System Update and Maintenance
+    Description: Update system packages and perform basic maintenance
+    Job Type: Run
+    Inventory: Demo Inventory
+    Project: Demo Project
+    Playbook: site.yml
+    Credentials: Demo Credential
+
+    Add variables to the template: - In the Variables section, add: `yaml
+
+    update_packages: true restart_services: false maintenance_mode: true
+
+
+    Configure additional options:
+        Set Verbosity to 1 (Verbose)
+        Check Enable Privilege Escalation
+        Set Job Timeout to 300 seconds
+
+    Save the template and verify it appears in the list.
+
+Task 2: Execute Job Template and Monitor Job Status
+Subtask 2.1: Launch Your First Job
+
+    Navigate to the Templates page:
+        Click Templates in the left menu
+        Locate My First Web Server Setup template
+
+    Launch the job:
+        Click the Launch button (rocket icon) next to your template
+        The job will start immediately and redirect you to the job details page
+
+    Observe the job launch process:
+        Note the Job ID assigned to your job
+        Observe the Status field changing from Pending to Running
+        Watch the real-time output in the Output section
+
+Subtask 2.2: Monitor Job Execution in Real-Time
+
+    Analyze the job output:
+        Watch the playbook tasks execute in real-time
+        Observe the PLAY and TASK headers
+        Note the ok, changed, and skipping status indicators
+
+    Monitor job progress:
+        Check the Progress Bar at the top of the output
+        Note the Elapsed Time counter
+        Observe the Status field updates
+
+    Review job statistics (when job completes):
+
+    Status: Successful
+    Total Time: [time taken]
+    Tasks: [number] total, [number] ok, [number] changed, [number] failed
+    Hosts: [number] total, [number] successful, [number] failed
+
+Subtask 2.3: Launch and Monitor the Complex Job Template
+
+    Launch the system maintenance job:
+        Return to Templates page
+        Click Launch on System Update and Maintenance template
+
+    Monitor the more complex execution:
+        Observe how variables are applied during execution
+        Watch for privilege escalation prompts
+        Note the increased verbosity in output
+
+    Handle job prompts (if any):
+        Some jobs may require user input or confirmation
+        Follow any on-screen prompts to continue execution
+
+Subtask 2.4: Review Job History and Details
+
+    Access job history:
+        Navigate to Jobs in the left menu
+        Review the list of all executed jobs
+        Note the Status, Start Time, and Duration columns
+
+    Examine job details:
+        Click on a completed job to view details
+        Review the Details tab for job configuration
+        Check the Output tab for complete execution log
+
+    Analyze job artifacts:
+        Look for any Artifacts created during job execution
+        Review Host Details to see per-host results
+        Check Activity Stream for audit trail
+
+Subtask 2.5: Understanding Job Status and Troubleshooting
+
+    Job status meanings:
+        Successful: All tasks completed without errors
+        Failed: One or more tasks failed
+        Error: Job encountered a system error
+        Canceled: Job was manually stopped
+        Pending: Job is waiting to start
+        Running: Job is currently executing
+
+    Troubleshoot a failed job (simulation):
+        Create a job template with an intentionally incorrect playbook name
+        Launch the job and observe the failure
+        Review error messages in the output
+        Identify the root cause from the error logs
+
+    Common troubleshooting steps:
+        Verify inventory hosts are accessible
+        Check credential permissions
+        Validate playbook syntax
+        Review project synchronization status
+        Check system resources and connectivity
+
+Subtask 2.6: Advanced Job Management
+
+    Schedule a job for later execution:
+        Navigate to Templates
+        Click Schedules tab on one of your templates
+        Click Add to create a new schedule
+        Configure schedule settings:
+
+    Name: Daily Maintenance
+    Start Date/Time: [tomorrow's date]
+    Repeat Frequency: Daily
+
+    Cancel a running job:
+        Launch a long-running job template
+        While it's running, click the Cancel button
+        Observe how the job stops gracefully
+        Review the canceled job's output
+
+    Relaunch a previous job:
+        Go to Jobs page
+        Find a previously completed job
+        Click the Relaunch button
+        Observe how it uses the same parameters
+
+Advanced Configuration and Best Practices
+Job Template Variables and Surveys
+
+    Add a survey to a job template:
+        Edit one of your existing templates
+        Click Add Survey button
+        Create survey questions:
+
+    Question: Which environment to deploy?
+    Answer Variable Name: target_environment
+    Answer Type: Multiple Choice
+    Multiple Choice Options: development, staging, production
+    Required: Yes
+
+    Test the survey:
+        Save the template with survey
+        Launch the job and fill out the survey
+        Observe how survey answers become variables
+
+Workflow Job Templates
+
+    Create a workflow template:
+        Go to Templates and click Add
+        Select Add workflow job template
+        Configure basic settings:
+
+    Name: Complete Application Deployment
+    Description: Full deployment workflow with multiple steps
+
+    Design the workflow:
+        Click Workflow Visualizer
+        Add your existing job templates as workflow nodes
+        Connect them with success/failure paths
+        Save the workflow
+
+Troubleshooting Common Issues
+Issue 1: Job Template Won't Launch
+
+Symptoms: Launch button is grayed out or job fails immediately
+
+Solutions:
+
+    Verify all required fields are filled
+    Check that inventory has accessible hosts
+    Ensure credentials have proper permissions
+    Confirm project sync is successful
+
+Issue 2: Playbook Not Found Error
+
+Symptoms: Job fails with "playbook not found" message
+
+Solutions:
+
+    Verify playbook exists in the project repository
+    Check playbook path and filename spelling
+    Ensure project synchronization completed successfully
+    Confirm playbook is in the correct directory
+
+Issue 3: Authentication Failures
+
+Symptoms: Jobs fail with SSH or permission errors
+
+Solutions:
+
+    Verify credential configuration
+    Check SSH key permissions and format
+    Ensure target hosts accept the SSH key
+    Test manual SSH connection to verify connectivity
+
+Issue 4: Slow Job Execution
+
+Symptoms: Jobs take longer than expected to complete
+
+Solutions:
+
+    Check network connectivity to target hosts
+    Review system resources on Automation Controller
+    Consider using forks parameter to increase parallelism
+    Optimize playbook tasks for better performance
+
+Conclusion
+
+In this lab, you have successfully learned to:
+
+    Navigate and use the Automation Controller interface to manage automation jobs effectively
+    Create job templates that serve as reusable automation blueprints for your infrastructure
+    Execute job templates and understand how they orchestrate playbook execution across multiple hosts
+    Monitor job execution in real-time and interpret job status, output, and statistics
+    Troubleshoot common issues that may arise during job execution
+    Implement advanced features like surveys, schedules, and workflows for complex automation scenarios
+
+Why This Matters: Automation Controller transforms individual Ansible playbooks into enterprise-ready automation solutions. By mastering job templates and execution monitoring, you can:
+
+    Scale automation across large infrastructures with consistent, repeatable processes
+    Provide self-service automation to teams through surveys and role-based access control
+    Maintain audit trails and compliance through comprehensive job logging and history
+    Integrate automation into CI/CD pipelines and other enterprise workflows
+    Reduce human error by standardizing automation execution and removing manual intervention
+
+The skills you've developed in this lab form the foundation for advanced automation scenarios including multi-tier application deployments, infrastructure provisioning, and compliance automation. These capabilities are essential for modern DevOps practices and are highly valued in enterprise environments seeking to improve operational efficiency and reliability.
