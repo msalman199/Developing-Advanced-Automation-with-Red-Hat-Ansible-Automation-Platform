@@ -1,0 +1,760 @@
+Lab 18: Creating Custom Content Collections
+Objectives
+
+By the end of this lab, you will be able to:
+
+• Understand the structure and purpose of Ansible content collections • Create a custom content collection containing roles and playbooks • Package and build your custom collection • Share collections with other teams using Ansible Galaxy • Implement best practices for collection development and distribution
+Prerequisites
+
+Before starting this lab, you should have:
+
+• Basic understanding of Ansible playbooks and roles • Familiarity with YAML syntax • Knowledge of Linux command line operations • Understanding of Git version control basics • Experience with Ansible Automation Platform fundamentals
+Lab Environment
+
+Ready-to-Use Cloud Machines: Al Nafi provides Linux-based cloud machines for this lab. Simply click Start Lab to access your pre-configured environment. No need to build your own VM or install additional software.
+
+Your lab environment includes: • CentOS/RHEL 8 or 9 control node with Ansible installed • Python 3.8+ with required modules • Git version control system • Text editor (vim/nano) • Network connectivity for package downloads
+Task 1: Create a Custom Content Collection
+Subtask 1.1: Initialize the Collection Structure
+
+First, let's create the basic structure for our custom collection.
+
+    Create a working directory for your collection:
+
+mkdir -p ~/ansible-collections
+cd ~/ansible-collections
+
+    Initialize a new collection using ansible-galaxy:
+
+ansible-galaxy collection init mycompany.infrastructure
+
+    Examine the created structure:
+
+tree mycompany/infrastructure/
+
+You should see a structure like this:
+
+mycompany/
+└── infrastructure/
+    ├── README.md
+    ├── galaxy.yml
+    ├── docs/
+    ├── plugins/
+    │   └── README.md
+    ├── roles/
+    ├── playbooks/
+    └── tests/
+
+Subtask 1.2: Configure Collection Metadata
+
+    Edit the galaxy.yml file to define collection metadata:
+
+cd mycompany/infrastructure
+vim galaxy.yml
+
+    Update the galaxy.yml with the following content:
+
+namespace: mycompany
+name: infrastructure
+version: 1.0.0
+readme: README.md
+authors:
+  - Your Name <your.email@company.com>
+description: Custom infrastructure automation collection
+license:
+  - GPL-2.0-or-later
+license_file: ''
+tags:
+  - infrastructure
+  - automation
+  - linux
+  - networking
+dependencies: {}
+repository: https://github.com/mycompany/infrastructure-collection
+documentation: https://github.com/mycompany/infrastructure-collection
+homepage: https://github.com/mycompany/infrastructure-collection
+issues: https://github.com/mycompany/infrastructure-collection/issues
+build_ignore:
+  - '*.pyc'
+  - '*.retry'
+  - '.git'
+  - '.gitignore'
+
+Subtask 1.3: Create Custom Roles
+
+    Create a web server role:
+
+mkdir -p roles/webserver
+cd roles/webserver
+ansible-galaxy init . --force
+
+    Define the webserver role tasks:
+
+vim tasks/main.yml
+
+Add the following content:
+
+---
+# tasks file for webserver
+- name: Install Apache web server
+  package:
+    name: "{{ web_package_name }}"
+    state: present
+  become: yes
+
+- name: Start and enable Apache service
+  service:
+    name: "{{ web_service_name }}"
+    state: started
+    enabled: yes
+  become: yes
+
+- name: Create custom index page
+  template:
+    src: index.html.j2
+    dest: "{{ web_document_root }}/index.html"
+    owner: "{{ web_user }}"
+    group: "{{ web_group }}"
+    mode: '0644'
+  become: yes
+  notify: restart webserver
+
+- name: Configure firewall for web traffic
+  firewalld:
+    service: http
+    permanent: yes
+    state: enabled
+    immediate: yes
+  become: yes
+  when: ansible_os_family == "RedHat"
+
+    Define role variables:
+
+vim defaults/main.yml
+
+---
+# defaults file for webserver
+web_package_name: "{{ 'httpd' if ansible_os_family == 'RedHat' else 'apache2' }}"
+web_service_name: "{{ 'httpd' if ansible_os_family == 'RedHat' else 'apache2' }}"
+web_document_root: "{{ '/var/www/html' if ansible_os_family == 'RedHat' else '/var/www/html' }}"
+web_user: "{{ 'apache' if ansible_os_family == 'RedHat' else 'www-data' }}"
+web_group: "{{ 'apache' if ansible_os_family == 'RedHat' else 'www-data' }}"
+web_port: 80
+company_name: "My Company"
+
+    Create a template for the index page:
+
+mkdir -p templates
+vim templates/index.html.j2
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ company_name }} - Web Server</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .header { color: #333; text-align: center; }
+        .info { background-color: #f4f4f4; padding: 20px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1 class="header">Welcome to {{ company_name }}</h1>
+    <div class="info">
+        <h2>Server Information</h2>
+        <p><strong>Hostname:</strong> {{ ansible_hostname }}</p>
+        <p><strong>Operating System:</strong> {{ ansible_distribution }} {{ ansible_distribution_version }}</p>
+        <p><strong>IP Address:</strong> {{ ansible_default_ipv4.address }}</p>
+        <p><strong>Deployed on:</strong> {{ ansible_date_time.date }}</p>
+    </div>
+</body>
+</html>
+
+    Create handlers for the role:
+
+vim handlers/main.yml
+
+---
+# handlers file for webserver
+- name: restart webserver
+  service:
+    name: "{{ web_service_name }}"
+    state: restarted
+  become: yes
+
+    Document the role:
+
+vim README.md
+
+# Webserver Role
+
+This role installs and configures a web server (Apache) on target systems.
+
+## Requirements
+
+- Target system should be RHEL/CentOS or Ubuntu/Debian based
+- Sudo/root access required
+
+## Role Variables
+
+- `web_package_name`: Package name for web server
+- `web_service_name`: Service name for web server
+- `web_port`: Port number for web server (default: 80)
+- `company_name`: Company name for web page
+
+## Example Playbook
+
+```yaml
+- hosts: webservers
+  roles:
+    - mycompany.infrastructure.webserver
+
+License
+
+GPL-2.0-or-later
+
+
+### Subtask 1.4: Create a Database Role
+
+1. **Create a database role**:
+
+```bash
+cd ../../
+mkdir -p roles/database
+cd roles/database
+ansible-galaxy init . --force
+
+    Define database role tasks:
+
+vim tasks/main.yml
+
+---
+# tasks file for database
+- name: Install MySQL/MariaDB server
+  package:
+    name: "{{ db_package_name }}"
+    state: present
+  become: yes
+
+- name: Install Python MySQL client
+  package:
+    name: "{{ python_mysql_package }}"
+    state: present
+  become: yes
+
+- name: Start and enable database service
+  service:
+    name: "{{ db_service_name }}"
+    state: started
+    enabled: yes
+  become: yes
+
+- name: Set root password
+  mysql_user:
+    name: root
+    password: "{{ db_root_password }}"
+    login_unix_socket: "{{ mysql_socket }}"
+    state: present
+  become: yes
+  when: db_root_password is defined
+
+- name: Create application database
+  mysql_db:
+    name: "{{ db_name }}"
+    state: present
+    login_user: root
+    login_password: "{{ db_root_password | default(omit) }}"
+  become: yes
+  when: db_name is defined
+
+- name: Create database user
+  mysql_user:
+    name: "{{ db_user }}"
+    password: "{{ db_password }}"
+    priv: "{{ db_name }}.*:ALL"
+    state: present
+    login_user: root
+    login_password: "{{ db_root_password | default(omit) }}"
+  become: yes
+  when: db_user is defined and db_password is defined
+
+    Define database role variables:
+
+vim defaults/main.yml
+
+---
+# defaults file for database
+db_package_name: "{{ 'mariadb-server' if ansible_os_family == 'RedHat' else 'mysql-server' }}"
+db_service_name: "{{ 'mariadb' if ansible_os_family == 'RedHat' else 'mysql' }}"
+python_mysql_package: "{{ 'python3-PyMySQL' if ansible_os_family == 'RedHat' else 'python3-pymysql' }}"
+mysql_socket: "{{ '/var/lib/mysql/mysql.sock' if ansible_os_family == 'RedHat' else '/var/run/mysqld/mysqld.sock' }}"
+db_root_password: "SecureRootPass123!"
+db_name: "webapp_db"
+db_user: "webapp_user"
+db_password: "WebAppPass123!"
+
+Subtask 1.5: Create Custom Playbooks
+
+    Create a playbooks directory and main deployment playbook:
+
+cd ../../
+mkdir -p playbooks
+vim playbooks/deploy_infrastructure.yml
+
+---
+- name: Deploy Web Infrastructure
+  hosts: webservers
+  become: yes
+  vars:
+    company_name: "{{ company_name | default('My Company Infrastructure') }}"
+  
+  tasks:
+    - name: Update system packages
+      package:
+        name: '*'
+        state: latest
+      when: update_packages | default(false) | bool
+
+    - name: Include webserver role
+      include_role:
+        name: mycompany.infrastructure.webserver
+
+- name: Deploy Database Infrastructure
+  hosts: databases
+  become: yes
+  
+  tasks:
+    - name: Include database role
+      include_role:
+        name: mycompany.infrastructure.database
+
+- name: Verify deployment
+  hosts: all
+  tasks:
+    - name: Check service status
+      service_facts:
+    
+    - name: Display running services
+      debug:
+        msg: "{{ item }} is running"
+      loop:
+        - httpd
+        - mariadb
+      when: 
+        - ansible_facts.services[item] is defined
+        - ansible_facts.services[item].state == "running"
+
+    Create a site configuration playbook:
+
+vim playbooks/site.yml
+
+---
+- import_playbook: deploy_infrastructure.yml
+
+- name: Configure monitoring
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install monitoring tools
+      package:
+        name:
+          - htop
+          - iotop
+          - nethogs
+        state: present
+
+    - name: Create monitoring script
+      copy:
+        content: |
+          #!/bin/bash
+          echo "=== System Status Report ==="
+          echo "Date: $(date)"
+          echo "Uptime: $(uptime)"
+          echo "Disk Usage:"
+          df -h
+          echo "Memory Usage:"
+          free -h
+          echo "=== End Report ==="
+        dest: /usr/local/bin/system-status.sh
+        mode: '0755'
+
+    Create an inventory example:
+
+mkdir -p playbooks/inventory
+vim playbooks/inventory/hosts.yml
+
+---
+all:
+  children:
+    webservers:
+      hosts:
+        web1:
+          ansible_host: 192.168.1.10
+        web2:
+          ansible_host: 192.168.1.11
+    databases:
+      hosts:
+        db1:
+          ansible_host: 192.168.1.20
+  vars:
+    ansible_user: ansible
+    ansible_ssh_private_key_file: ~/.ssh/id_rsa
+
+Task 2: Share the Collection with Other Teams
+Subtask 2.1: Build the Collection
+
+    Navigate to the collection root directory:
+
+cd ~/ansible-collections/mycompany/infrastructure
+
+    Build the collection package:
+
+ansible-galaxy collection build
+
+This creates a tarball file like mycompany-infrastructure-1.0.0.tar.gz.
+
+    Verify the build contents:
+
+tar -tzf mycompany-infrastructure-1.0.0.tar.gz | head -20
+
+Subtask 2.2: Test the Collection Locally
+
+    Install the collection locally for testing:
+
+ansible-galaxy collection install mycompany-infrastructure-1.0.0.tar.gz --force
+
+    Verify installation:
+
+ansible-galaxy collection list
+
+    Test the collection with a simple playbook:
+
+mkdir -p ~/test-collection
+cd ~/test-collection
+vim test-playbook.yml
+
+---
+- name: Test Custom Collection
+  hosts: localhost
+  connection: local
+  gather_facts: yes
+  
+  tasks:
+    - name: Display collection info
+      debug:
+        msg: "Testing mycompany.infrastructure collection"
+    
+    - name: Test webserver role (dry run)
+      include_role:
+        name: mycompany.infrastructure.webserver
+      vars:
+        company_name: "Test Company"
+      check_mode: yes
+
+    Run the test playbook:
+
+ansible-playbook test-playbook.yml
+
+Subtask 2.3: Create a Private Galaxy Server (Optional)
+
+For organizations that need private collection sharing:
+
+    Install Pulp Galaxy (simplified setup):
+
+# Create a simple file server for collections
+mkdir -p ~/private-galaxy
+cd ~/private-galaxy
+
+# Copy your collection
+cp ~/ansible-collections/mycompany/infrastructure/mycompany-infrastructure-1.0.0.tar.gz .
+
+# Create a simple index
+cat > index.html << 'EOF'
+<!DOCTYPE html>
+<html>
+<head><title>Private Galaxy</title></head>
+<body>
+<h1>Private Ansible Galaxy</h1>
+<ul>
+<li><a href="mycompany-infrastructure-1.0.0.tar.gz">mycompany.infrastructure v1.0.0</a></li>
+</ul>
+</body>
+</html>
+EOF
+
+# Start a simple HTTP server
+python3 -m http.server 8080 &
+
+    Configure ansible.cfg for private galaxy:
+
+vim ~/.ansible.cfg
+
+[defaults]
+collections_paths = ~/.ansible/collections:/usr/share/ansible/collections
+
+[galaxy]
+server_list = private_galaxy, automation_hub, galaxy
+
+[galaxy_server.private_galaxy]
+url = http://localhost:8080/
+token = your_token_here
+
+[galaxy_server.automation_hub]
+url = https://console.redhat.com/api/automation-hub/
+auth_url = https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token
+token = your_automation_hub_token
+
+[galaxy_server.galaxy]
+url = https://galaxy.ansible.com/
+
+Subtask 2.4: Share via Git Repository
+
+    Initialize a Git repository for the collection:
+
+cd ~/ansible-collections/mycompany/infrastructure
+git init
+git add .
+git commit -m "Initial collection commit"
+
+    Create a comprehensive README for sharing:
+
+vim README.md
+
+# MyCompany Infrastructure Collection
+
+This collection provides roles and playbooks for standardized infrastructure deployment.
+
+## Installation
+
+### From Git Repository
+
+```bash
+ansible-galaxy collection install git+https://github.com/mycompany/infrastructure-collection.git
+
+From Tarball
+
+ansible-galaxy collection install mycompany-infrastructure-1.0.0.tar.gz
+
+Contents
+Roles
+
+    webserver: Installs and configures Apache web server
+    database: Installs and configures MariaDB/MySQL database
+
+Playbooks
+
+    deploy_infrastructure.yml: Complete infrastructure deployment
+    site.yml: Site-wide configuration including monitoring
+
+Usage Examples
+Basic Web Server Deployment
+
+- hosts: webservers
+  roles:
+    - mycompany.infrastructure.webserver
+  vars:
+    company_name: "My Organization"
+
+Complete Infrastructure Deployment
+
+ansible-playbook mycompany.infrastructure.deploy_infrastructure -i inventory/hosts.yml
+
+Requirements
+
+    Ansible 2.9+
+    Target systems: RHEL/CentOS 7+, Ubuntu 18.04+
+    Sudo access on target systems
+
+Variables
+Webserver Role Variables
+Variable 	Default 	Description
+company_name 	"My Company" 	Company name for web page
+web_port 	80 	Web server port
+Database Role Variables
+Variable 	Default 	Description
+db_root_password 	"SecureRootPass123!" 	Database root password
+db_name 	"webapp_db" 	Application database name
+db_user 	"webapp_user" 	Application database user
+Contributing
+
+    Fork the repository
+    Create a feature branch
+    Make your changes
+    Test thoroughly
+    Submit a pull request
+
+License
+
+GPL-2.0-or-later
+
+
+3. **Create a requirements.yml for easy installation**:
+
+```bash
+vim requirements.yml
+
+---
+collections:
+  - name: mycompany.infrastructure
+    source: https://github.com/mycompany/infrastructure-collection.git
+    type: git
+    version: main
+
+Subtask 2.5: Document Collection Usage
+
+    Create usage documentation:
+
+mkdir -p docs
+vim docs/usage_guide.md
+
+# Usage Guide: MyCompany Infrastructure Collection
+
+## Quick Start
+
+1. Install the collection:
+   ```bash
+   ansible-galaxy collection install mycompany.infrastructure
+
+    Create an inventory file:
+
+    # inventory/hosts.yml
+    webservers:
+      hosts:
+        web1:
+          ansible_host: 10.0.1.10
+    databases:
+      hosts:
+        db1:
+          ansible_host: 10.0.1.20
+
+    Run the deployment:
+
+    ansible-playbook mycompany.infrastructure.deploy_infrastructure -i inventory/hosts.yml
+
+Advanced Configuration
+Custom Variables
+
+Create a group_vars file for customization:
+
+# group_vars/all.yml
+company_name: "Your Company Name"
+db_root_password: "YourSecurePassword"
+update_packages: true
+
+Role Customization
+
+Override role defaults in your playbook:
+
+- hosts: webservers
+  roles:
+    - role: mycompany.infrastructure.webserver
+      vars:
+        web_port: 8080
+        company_name: "Development Environment"
+
+Troubleshooting
+Common Issues
+
+    Permission Denied: Ensure ansible user has sudo access
+    Package Not Found: Update package cache first
+    Service Failed to Start: Check firewall and SELinux settings
+
+Debug Mode
+
+Run with verbose output:
+
+ansible-playbook -vvv mycompany.infrastructure.deploy_infrastructure
+
+
+2. **Create team sharing instructions**:
+
+```bash
+vim docs/team_sharing.md
+
+# Team Sharing Instructions
+
+## For Collection Maintainers
+
+### Publishing Updates
+
+1. Update version in galaxy.yml
+2. Build new collection:
+   ```bash
+   ansible-galaxy collection build
+
+    Test the collection
+    Distribute to teams
+
+Version Management
+
+Follow semantic versioning:
+
+    Major: Breaking changes
+    Minor: New features
+    Patch: Bug fixes
+
+For Collection Users
+Installation
+
+# Install from requirements file
+ansible-galaxy collection install -r requirements.yml
+
+# Install specific version
+ansible-galaxy collection install mycompany.infrastructure:1.0.0
+
+Staying Updated
+
+# Check for updates
+ansible-galaxy collection list
+
+# Update to latest
+ansible-galaxy collection install mycompany.infrastructure --upgrade
+
+Reporting Issues
+
+    Check existing documentation
+    Test with minimal example
+    Report via GitHub issues
+    Include Ansible version and OS details
+
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+**Issue**: Collection build fails with "galaxy.yml not found"
+**Solution**: Ensure you're in the collection root directory containing galaxy.yml
+
+**Issue**: Role tasks fail with "module not found"
+**Solution**: Verify all required modules are available and collection dependencies are installed
+
+**Issue**: Permission denied when installing packages
+**Solution**: Ensure the ansible user has sudo privileges and become: yes is set
+
+**Issue**: Service fails to start
+**Solution**: Check firewall settings and SELinux policies on target systems
+
+### Verification Commands
+
+```bash
+# Verify collection structure
+ansible-galaxy collection list
+
+# Test collection syntax
+ansible-playbook --syntax-check playbook.yml
+
+# Dry run deployment
+ansible-playbook --check playbook.yml
+
+Conclusion
+
+In this lab, you have successfully:
+
+• Created a comprehensive custom Ansible collection with reusable roles for web server and database deployment • Structured the collection following Ansible best practices with proper metadata, documentation, and organization • Developed standardized automation components that can be shared across teams and projects • Implemented collection packaging and distribution methods including local builds and Git-based sharing • Established documentation and usage guidelines to facilitate team adoption and maintenance
+
+This custom collection approach provides several key benefits:
+
+Standardization: Ensures consistent deployment patterns across your organization Reusability: Eliminates duplicate automation code and promotes best practices Maintainability: Centralizes updates and improvements in a single location Collaboration: Enables teams to share and contribute to common automation tasks Version Control: Provides proper versioning and change management for automation assets
+
+The skills you've developed in this lab are essential for scaling Ansible automation in enterprise environments, where standardized, shareable content collections become critical for maintaining consistency and efficiency across multiple teams and projects.
+
+Your custom collection can now serve as a foundation for expanding your organization's automation capabilities, with clear pathways for adding new roles, playbooks, and sharing mechanisms as your infrastructure automation needs grow.
