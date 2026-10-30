@@ -1,0 +1,35 @@
+---
+- name: Gather System Information from Dynamic Inventory
+  hosts: all
+  gather_facts: yes
+  vars:
+    output_dir: "/tmp/system_reports"
+
+  tasks:
+    - name: Create output directory
+      file:
+        path: "{{ output_dir }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      run_once: true
+
+    - name: Display basic system information
+      debug:
+        msg: |
+          Host: {{ inventory_hostname }}
+          OS: {{ ansible_distribution | default('N/A') }} {{ ansible_distribution_version | default('') }}
+          IP Address: {{ ansible_default_ipv4.address | default('N/A') }}
+
+    - name: Create system report
+      copy:
+        content: |
+          System Report for {{ inventory_hostname }}
+          =====================================
+          Hostname: {{ ansible_hostname | default('N/A') }}
+          Operating System: {{ ansible_distribution | default('N/A') }} {{ ansible_distribution_version | default('') }}
+          Instance Type: {{ ec2_instance_type | default('N/A') }}
+          Availability Zone: {{ ec2_az | default('N/A') }}
+          State: {{ ec2_state | default('N/A') }}
+        dest: "{{ output_dir }}/{{ inventory_hostname }}_report.txt"
+      delegate_to: localhost
