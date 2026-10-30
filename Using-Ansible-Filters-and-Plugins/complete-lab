@@ -1,0 +1,700 @@
+Lab 15: Using Ansible Filters and Plugins
+Objectives
+
+By the end of this lab, you will be able to:
+
+    Understand the purpose and functionality of Ansible filters and plugins
+    Apply built-in filters to manipulate and transform data in Ansible playbooks
+    Create and use custom filters for specific data transformation needs
+    Implement lookup plugins to interact with external systems and data sources
+    Use callback plugins to customize Ansible output and logging
+    Troubleshoot common issues with filters and plugins
+
+Prerequisites
+
+Before starting this lab, you should have:
+
+    Basic understanding of Ansible playbooks, tasks, and variables
+    Familiarity with YAML syntax and Jinja2 templating
+    Knowledge of Linux command line operations
+    Understanding of Python basics (helpful but not required)
+    Experience with Ansible inventory and configuration files
+
+Install the required software on your lab machine (CentOS/RHEL 8 or Ubuntu 20.04 LTS with Python 3.8+):
+
+python3 -m pip install --user --upgrade pip
+python3 -m pip install --user ansible requests
+ansible --version
+
+You should see ansible [core 2.11+] and a Python 3.8+ interpreter reported in the version output.
+Task 1: Apply Filters to Variables to Modify Data
+Subtask 1.1: Environment Setup
+
+Step 1: Create a working directory for the lab
+
+mkdir -p ~/ansible-filters-lab
+cd ~/ansible-filters-lab
+
+Step 2: Create an inventory file
+
+cat > inventory << 'EOF'
+[webservers]
+web1 ansible_host=localhost ansible_connection=local
+web2 ansible_host=localhost ansible_connection=local
+
+[databases]
+db1 ansible_host=localhost ansible_connection=local
+EOF
+
+Step 3: Create an ansible.cfg file
+
+cat > ansible.cfg << 'EOF'
+[defaults]
+inventory = inventory
+host_key_checking = False
+stdout_callback = yaml
+EOF
+
+Deliverable: A directory ~/ansible-filters-lab containing inventory and ansible.cfg. Running ansible all --list-hosts should list web1, web2, and db1.
+Subtask 1.2: Working with String, List, and Dictionary Filters
+
+Step 1: Create a playbook to demonstrate string filters
+
+cat > string-filters.yml << 'EOF'
+---
+- name: Demonstrate String Filters
+  hosts: webservers
+  gather_facts: no
+  vars:
+    sample_text: "  Hello World from Ansible  "
+    server_name: "web-server-01"
+    email_address: "admin@example.com"
+    version_string: "2.4.1"
+
+  tasks:
+    - name: Display original string
+      debug:
+        msg: "Original: '{{ sample_text }}'"
+
+    - name: Apply trim filter
+      debug:
+        msg: "Trimmed: '{{ sample_text | trim }}'"
+
+    - name: Apply upper and lower case filters
+      debug:
+        msg:
+          - "Uppercase: {{ sample_text | trim | upper }}"
+          - "Lowercase: {{ sample_text | trim | lower }}"
+
+    - name: Apply replace filter
+      debug:
+        msg: "Replaced: {{ server_name | replace('-', '_') }}"
+
+    - name: Extract domain from email
+      debug:
+        msg: "Domain: {{ email_address | regex_replace('^.*@(.*)$', '\\1') }}"
+
+    - name: Split version string
+      debug:
+        msg: "Version parts: {{ version_string.split('.') }}"
+
+    - name: Get string length
+      debug:
+        msg: "Server name length: {{ server_name | length }}"
+EOF
+
+Step 2: Run the string filters playbook
+
+ansible-playbook string-filters.yml
+
+Step 3: Create a playbook for list and dictionary manipulation
+
+cat > list-dict-filters.yml << 'EOF'
+---
+- name: Demonstrate List and Dictionary Filters
+  hosts: webservers
+  gather_facts: no
+  vars:
+    server_list:
+      - "web01"
+      - "web02"
+      - "db01"
+      - "web03"
+
+    server_ports: [80, 443, 8080, 3306, 5432]
+
+    server_config:
+      web01:
+        role: webserver
+        port: 80
+        status: active
+      web02:
+        role: webserver
+        port: 443
+        status: inactive
+      db01:
+        role: database
+        port: 3306
+        status: active
+
+    mixed_numbers: [1, 5, 3, 9, 2, 7]
+
+  tasks:
+    - name: Filter web servers from list
+      debug:
+        msg: "Web servers: {{ server_list | select('match', '^web.*') | list }}"
+
+    - name: Get unique values and sort
+      debug:
+        msg: "Sorted unique ports: {{ server_ports | unique | sort }}"
+
+    - name: Get min, max, and sum values
+      debug:
+        msg:
+          - "Min port: {{ server_ports | min }}"
+          - "Max port: {{ server_ports | max }}"
+          - "Sum of numbers: {{ mixed_numbers | sum }}"
+
+    - name: Work with dictionary keys and values
+      debug:
+        msg:
+          - "Server names: {{ server_config.keys() | list }}"
+          - "Active servers: {{ server_config | dict2items | selectattr('value.status', 'equalto', 'active') | map(attribute='key') | list }}"
+
+    - name: Group servers by role
+      debug:
+        msg: "Webservers: {{ server_config | dict2items | selectattr('value.role', 'equalto', 'webserver') | map(attribute='key') | list }}"
+
+    - name: Join list elements
+      debug:
+        msg: "Servers as string: {{ server_list | join(', ') }}"
+EOF
+
+Step 4: Run the list and dictionary filters playbook
+
+ansible-playbook list-dict-filters.yml
+
+Deliverable: Both playbooks execute with failed=0. The output for list-dict-filters.yml must show Web servers: ["web01", "web02", "web03"], Sorted unique ports: [80, 443, 3306, 5432, 8080], and Active servers: ["web01", "db01"].
+Subtask 1.3: Creating Custom Filters
+
+Step 1: Create a directory for custom filters
+
+mkdir -p filter_plugins
+
+Step 2: Create a custom filter plugin
+
+cat > filter_plugins/custom_filters.py << 'EOF'
+#!/usr/bin/env python3
+
+import re
+
+
+def reverse_string(text):
+    """Reverse a string"""
+    return str(text)[::-1]
+
+
+def extract_numbers(text):
+    """Extract all numbers from a string"""
+    return re.findall(r'\d+', str(text))
+
+
+def calculate_percentage(value, total):
+    """Calculate percentage"""
+    try:
+        return round((float(value) / float(total)) * 100, 2)
+    except (ValueError, ZeroDivisionError):
+        return 0
+
+
+def format_bytes(bytes_value):
+    """Convert bytes to human readable format"""
+    try:
+        bytes_value = float(bytes_value)
+        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+            if bytes_value < 1024.0:
+                return f"{bytes_value:.2f} {unit}"
+            bytes_value /= 1024.0
+        return f"{bytes_value:.2f} PB"
+    except (ValueError, TypeError):
+        return "0 B"
+
+
+class FilterModule(object):
+    """Custom Ansible filters"""
+
+    def filters(self):
+        return {
+            'reverse_string': reverse_string,
+            'extract_numbers': extract_numbers,
+            'calculate_percentage': calculate_percentage,
+            'format_bytes': format_bytes,
+        }
+EOF
+
+Step 3: Create a playbook to test custom filters
+
+cat > custom-filters.yml << 'EOF'
+---
+- name: Test Custom Filters
+  hosts: webservers
+  gather_facts: no
+  vars:
+    sample_text: "Hello Ansible 2024"
+    disk_usage: 1073741824
+    completed_tasks: 75
+    total_tasks: 100
+
+  tasks:
+    - name: Test reverse string filter
+      debug:
+        msg: "Reversed: {{ sample_text | reverse_string }}"
+
+    - name: Extract numbers from text
+      debug:
+        msg: "Numbers found: {{ sample_text | extract_numbers }}"
+
+    - name: Calculate completion percentage
+      debug:
+        msg: "Progress: {{ completed_tasks | calculate_percentage(total_tasks) }}%"
+
+    - name: Format bytes to human readable
+      debug:
+        msg: "Disk usage: {{ disk_usage | format_bytes }}"
+
+    - name: Combine custom and built-in filters
+      debug:
+        msg: "Reversed uppercase: {{ sample_text | reverse_string | upper }}"
+EOF
+
+Step 4: Run the custom filters playbook
+
+ansible-playbook custom-filters.yml
+
+Deliverable: The output must show Numbers found: ["2024"], Progress: 75.0%, and Disk usage: 1.00 GB. This confirms your custom filter plugin loaded correctly from filter_plugins/custom_filters.py.
+Task 2: Use Plugins to Interact with External Systems
+Subtask 2.1: Working with Built-in Lookup Plugins
+
+Ansible lookup plugins retrieve data from external sources such as files, environment variables, and commands.
+
+Step 1: Create a template file used by the template lookup
+
+cat > message.j2 << 'EOF'
+Welcome {{ username }} to {{ server_name }} server!
+EOF
+
+Step 2: Create a playbook using built-in lookup plugins
+
+cat > lookup-plugins.yml << 'EOF'
+---
+- name: Demonstrate Lookup Plugins
+  hosts: localhost
+  gather_facts: no
+
+  tasks:
+    - name: Read file content using file lookup
+      debug:
+        msg: "Hostname: {{ lookup('file', '/etc/hostname') | trim }}"
+      ignore_errors: yes
+
+    - name: Get environment variables
+      debug:
+        msg:
+          - "Home directory: {{ lookup('env', 'HOME') }}"
+          - "Current user: {{ lookup('env', 'USER') }}"
+
+    - name: Generate a random password
+      debug:
+        msg: "Random password: {{ lookup('password', '/tmp/ansible_lab_password length=12') }}"
+
+    - name: Use pipe lookup to run a command
+      debug:
+        msg: "Current date: {{ lookup('pipe', 'date') }}"
+
+    - name: Use template lookup
+      debug:
+        msg: "Templated message: {{ lookup('template', 'message.j2') }}"
+      vars:
+        username: "ansible_user"
+        server_name: "production"
+EOF
+
+Step 3: Run the lookup plugins playbook
+
+ansible-playbook lookup-plugins.yml
+
+Deliverable: The task output shows a non-empty Hostname:, Home directory:, and Templated message: Welcome ansible_user to production server!. A password file is created at /tmp/ansible_lab_password.
+Subtask 2.2: Creating a Custom Lookup Plugin
+
+Step 1: Create a directory for lookup plugins
+
+mkdir -p lookup_plugins
+
+Step 2: Create a custom lookup plugin to read JSON data
+
+cat > lookup_plugins/json_query.py << 'EOF'
+#!/usr/bin/env python3
+
+from ansible.plugins.lookup import LookupBase
+from ansible.errors import AnsibleError
+import json
+
+
+class LookupModule(LookupBase):
+    """
+    Custom lookup plugin to read JSON data from local files
+    """
+
+    def run(self, terms, variables=None, **kwargs):
+        results = []
+
+        for term in terms:
+            try:
+                with open(term, 'r') as f:
+                    data = json.load(f)
+                results.append(data)
+            except json.JSONDecodeError as e:
+                raise AnsibleError(f"Invalid JSON in {term}: {str(e)}")
+            except FileNotFoundError:
+                raise AnsibleError(f"File not found: {term}")
+            except Exception as e:
+                raise AnsibleError(f"Unexpected error: {str(e)}")
+
+        return results
+EOF
+
+Step 3: Create sample JSON data file
+
+cat > sample_data.json << 'EOF'
+{
+  "servers": [
+    {
+      "name": "web01",
+      "ip": "192.168.1.10",
+      "role": "webserver",
+      "status": "active"
+    },
+    {
+      "name": "web02",
+      "ip": "192.168.1.11",
+      "role": "webserver",
+      "status": "active"
+    },
+    {
+      "name": "db01",
+      "ip": "192.168.1.20",
+      "role": "database",
+      "status": "maintenance"
+    }
+  ],
+  "configuration": {
+    "max_connections": 1000,
+    "timeout": 30,
+    "ssl_enabled": true
+  }
+}
+EOF
+
+Step 4: Create a playbook to test the custom lookup plugin
+
+cat > custom-lookup.yml << 'EOF'
+---
+- name: Test Custom JSON Lookup Plugin
+  hosts: localhost
+  gather_facts: no
+
+  tasks:
+    - name: Load server data from JSON file
+      set_fact:
+        server_data: "{{ lookup('json_query', 'sample_data.json') }}"
+
+    - name: Display all servers
+      debug:
+        msg: "Server: {{ item.name }} ({{ item.ip }}) - {{ item.role }} - {{ item.status }}"
+      loop: "{{ server_data.servers }}"
+
+    - name: Show active web servers only
+      debug:
+        msg: "Active webserver: {{ item.name }}"
+      loop: "{{ server_data.servers }}"
+      when:
+        - item.role == "webserver"
+        - item.status == "active"
+
+    - name: Display configuration
+      debug:
+        msg: "Max connections: {{ server_data.configuration.max_connections }}"
+EOF
+
+Step 5: Run the playbook
+
+ansible-playbook custom-lookup.yml
+
+Deliverable: Output lists all three servers by name, IP, role, and status, then shows only web01 and web02 as "Active webserver", and finally prints Max connections: 1000.
+Subtask 2.3: Working with Callback Plugins
+
+Step 1: Create a directory for callback plugins
+
+mkdir -p callback_plugins
+
+Step 2: Create a custom callback plugin for enhanced logging
+
+cat > callback_plugins/detailed_logger.py << 'EOF'
+#!/usr/bin/env python3
+
+from ansible.plugins.callback import CallbackBase
+from datetime import datetime
+
+
+class CallbackModule(CallbackBase):
+    """
+    Custom callback plugin for detailed logging
+    """
+
+    CALLBACK_VERSION = 2.0
+    CALLBACK_TYPE = 'stdout'
+    CALLBACK_NAME = 'detailed_logger'
+
+    def __init__(self):
+        super(CallbackModule, self).__init__()
+        self.start_time = None
+        self.task_start_time = None
+
+    def v2_playbook_on_start(self, playbook):
+        self.start_time = datetime.now()
+        self._display.display(f"\n=== PLAYBOOK START: {playbook._file_name} ===")
+        self._display.display(f"Start time: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    def v2_playbook_on_play_start(self, play):
+        self._display.display(f"\n--- PLAY: {play.get_name()} ---")
+
+    def v2_playbook_on_task_start(self, task, is_conditional):
+        self.task_start_time = datetime.now()
+        self._display.display(f"\nTASK: {task.get_name()}")
+
+    def v2_runner_on_ok(self, result):
+        if self.task_start_time:
+            duration = datetime.now() - self.task_start_time
+            self._display.display(f"SUCCESS on {result._host.get_name()} (Duration: {duration.total_seconds():.2f}s)")
+
+        if result._result.get('msg'):
+            self._display.display(f"  Message: {result._result['msg']}")
+
+    def v2_runner_on_failed(self, result, ignore_errors=False):
+        if self.task_start_time:
+            duration = datetime.now() - self.task_start_time
+            self._display.display(f"FAILED on {result._host.get_name()} (Duration: {duration.total_seconds():.2f}s)")
+
+        self._display.display(f"  Error: {result._result.get('msg', 'Unknown error')}")
+
+    def v2_playbook_on_stats(self, stats):
+        if self.start_time:
+            total_duration = datetime.now() - self.start_time
+            self._display.display("\n=== PLAYBOOK COMPLETE ===")
+            self._display.display(f"Total duration: {total_duration.total_seconds():.2f} seconds")
+
+            hosts = sorted(stats.processed.keys())
+            for host in hosts:
+                summary = stats.summarize(host)
+                self._display.display(
+                    f"Host {host}: ok={summary['ok']} changed={summary['changed']} "
+                    f"unreachable={summary['unreachable']} failed={summary['failures']}"
+                )
+EOF
+
+Step 3: Create a playbook to test the callback plugin
+
+cat > callback-test.yml << 'EOF'
+---
+- name: Test Custom Callback Plugin
+  hosts: webservers
+  gather_facts: no
+
+  tasks:
+    - name: Quick task
+      debug:
+        msg: "This is a quick task"
+
+    - name: Task with variable
+      debug:
+        msg: "Server name: {{ inventory_hostname }}"
+
+    - name: Mathematical operation
+      debug:
+        msg: "Result: {{ 10 * 5 + 25 }}"
+
+    - name: Final task
+      debug:
+        msg: "All tasks completed successfully!"
+EOF
+
+Step 4: Run the playbook with the custom callback plugin
+
+ANSIBLE_STDOUT_CALLBACK=detailed_logger ansible-playbook callback-test.yml
+
+Deliverable: Console output begins with === PLAYBOOK START: and ends with === PLAYBOOK COMPLETE === followed by per-host summary lines showing ok=4 changed=0 unreachable=0 failed=0 for web1 and web2.
+Task 3: Combine Filters and Plugins in a Real-World Scenario
+Subtask 3.1: Building an Infrastructure Reporting Playbook
+
+Step 1: Create a comprehensive playbook combining filters and plugins
+
+cat > infrastructure-management.yml << 'EOF'
+---
+- name: Infrastructure Management with Filters and Plugins
+  hosts: localhost
+  gather_facts: yes
+  vars:
+    server_inventory_file: "server_inventory.json"
+    alert_threshold_cpu: 80
+    alert_threshold_memory: 85
+
+  tasks:
+    - name: Create server inventory data
+      copy:
+        content: |
+          {
+            "servers": [
+              {
+                "hostname": "web-prod-01",
+                "ip": "10.0.1.10",
+                "role": "webserver",
+                "environment": "production",
+                "cpu_usage": 75,
+                "memory_usage": 82,
+                "disk_usage_bytes": 85899345920,
+                "last_backup": "2024-01-10",
+                "status": "active"
+              },
+              {
+                "hostname": "web-prod-02",
+                "ip": "10.0.1.11",
+                "role": "webserver",
+                "environment": "production",
+                "cpu_usage": 68,
+                "memory_usage": 79,
+                "disk_usage_bytes": 92274688000,
+                "last_backup": "2024-01-12",
+                "status": "active"
+              },
+              {
+                "hostname": "db-prod-01",
+                "ip": "10.0.2.10",
+                "role": "database",
+                "environment": "production",
+                "cpu_usage": 45,
+                "memory_usage": 91,
+                "disk_usage_bytes": 549755813888,
+                "last_backup": "2024-01-14",
+                "status": "maintenance"
+              }
+            ]
+          }
+        dest: "{{ server_inventory_file }}"
+
+    - name: Load server inventory
+      set_fact:
+        infrastructure: "{{ lookup('json_query', server_inventory_file) }}"
+
+    - name: Generate infrastructure summary
+      debug:
+        msg:
+          - "Total servers: {{ infrastructure.servers | length }}"
+          - "Active servers: {{ infrastructure.servers | selectattr('status', 'equalto', 'active') | list | length }}"
+          - "Production webservers: {{ infrastructure.servers | selectattr('environment', 'equalto', 'production') | selectattr('role', 'equalto', 'webserver') | list | length }}"
+
+    - name: Check servers requiring CPU attention
+      debug:
+        msg: "HIGH CPU: {{ item.hostname }} - {{ item.cpu_usage }}%"
+      loop: "{{ infrastructure.servers }}"
+      when: item.cpu_usage > alert_threshold_cpu
+
+    - name: Check memory usage alerts
+      debug:
+        msg: "HIGH MEMORY: {{ item.hostname }} - {{ item.memory_usage }}%"
+      loop: "{{ infrastructure.servers }}"
+      when: item.memory_usage > alert_threshold_memory
+
+    - name: Format disk usage for all servers
+      debug:
+        msg: "{{ item.hostname }}: {{ item.disk_usage_bytes | format_bytes }}"
+      loop: "{{ infrastructure.servers }}"
+
+    - name: Calculate average resource usage
+      debug:
+        msg:
+          - "Average CPU usage: {{ (infrastructure.servers | map(attribute='cpu_usage') | sum / infrastructure.servers | length) | round(1) }}%"
+          - "Average memory usage: {{ (infrastructure.servers | map(attribute='memory_usage') | sum / infrastructure.servers | length) | round(1) }}%"
+
+    - name: Create maintenance schedule
+      debug:
+        msg: "Maintenance needed for: {{ infrastructure.servers | selectattr('status', 'equalto', 'maintenance') | map(attribute='hostname') | join(', ') }}"
+EOF
+
+Step 2: Run the comprehensive infrastructure management playbook
+
+ansible-playbook infrastructure-management.yml
+
+Deliverable: Output shows Total servers: 3, Active servers: 2, a HIGH MEMORY: db-prod-01 - 91% alert, formatted disk usage lines (e.g. web-prod-01: 80.00 GB), and Maintenance needed for: db-prod-01.
+Subtask 3.2: Debugging Filters with a Diagnostic Playbook
+
+Step 1: Create a debug playbook for testing filters end to end
+
+cat > debug-filters.yml << 'EOF'
+---
+- name: Debug Filters and Variables
+  hosts: localhost
+  gather_facts: no
+  vars:
+    test_var: "Hello World"
+    test_list: [1, 2, 3, 4, 5]
+    test_dict: {key1: value1, key2: value2}
+
+  tasks:
+    - name: Debug variable types and values
+      debug:
+        msg:
+          - "String: {{ test_var | upper }}"
+          - "String type: {{ test_var | type_debug }}"
+          - "List: {{ test_list }}"
+          - "List type: {{ test_list | type_debug }}"
+          - "List sum: {{ test_list | sum }}"
+          - "Dict: {{ test_dict }}"
+          - "Dict type: {{ test_dict | type_debug }}"
+          - "Dict keys: {{ test_dict.keys() | list }}"
+
+    - name: Debug with default filter for undefined variables
+      debug:
+        msg: "Undefined with default: {{ undefined_var | default('fallback_value') }}"
+
+    - name: Debug combining custom and built-in filters
+      debug:
+        msg: "Custom + built-in: {{ test_var | reverse_string | lower }}"
+EOF
+
+Step 2: Run the debug playbook
+
+ansible-playbook debug-filters.yml
+
+Deliverable: Output shows String: HELLO WORLD, String type: str, List sum: 15, Dict type: dict, Undefined with default: fallback_value, and Custom + built-in: dlrow olleh. A clean run confirms both the type_debug built-in filter and the reverse_string custom filter from Task 1 are working together correctly.
+Cleanup
+
+Remove the temporary files and working directory created during this lab:
+
+rm -f /tmp/ansible_lab_password /tmp/ansible_lab_password.info /tmp/complex_password* /tmp/mock_api_response.json
+cd ~
+rm -rf ~/ansible-filters-lab
+
+Expected Outcomes
+
+    Working playbooks that demonstrate string, list, dictionary, date, and math filters, plus a custom filter plugin performing string reversal, number extraction, percentage calculation, and byte formatting
+    A functioning custom lookup plugin that reads structured JSON data and a custom callback plugin that produces timestamped, per-task execution logs
+    A combined infrastructure reporting playbook that loads external JSON data, applies filters to compute summaries, and raises threshold-based alerts
+
+Troubleshooting
+
+    If ansible-playbook custom-filters.yml fails with an error like "no filter named 'reverse_string'", investigate: is the command being run from the ~/ansible-filters-lab directory, and does filter_plugins/custom_filters.py pass python3 -m py_compile filter_plugins/custom_filters.py without errors?
+    If the callback plugin produces no extra output when running callback-test.yml, check whether ANSIBLE_STDOUT_CALLBACK was actually exported in the same shell session as the ansible-playbook command, and whether callback_plugins/ sits alongside ansible.cfg in the current working directory.
+
+Conclusion
+
+In this lab you built a complete working set of Ansible filters and plugins: string, list, dictionary, date, and math filter demonstrations; a custom filter module providing string reversal, numeric extraction, percentage calculation, and byte formatting; a custom lookup plugin for reading JSON data; and a custom callback plugin for detailed execution logging. You then combined all of these into a single infrastructure reporting playbook that loaded external data, computed summary statistics, and raised threshold-based alerts, and you finished by writing a diagnostic playbook to verify filter behavior directly. Through this process you practiced extending Ansible's Jinja2-based templating with custom Python logic, a core skill for building maintainable, data-driven automation. From here, consider exploring the official Ansible documentation on writing plugins and the Jinja2 Template Designer documentation to deepen your understanding of filter chaining and plugin APIs, and try packaging your custom plugins into an Ansible Collection for reuse across projects.

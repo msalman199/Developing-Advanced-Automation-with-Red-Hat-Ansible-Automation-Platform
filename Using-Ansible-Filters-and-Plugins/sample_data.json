@@ -1,0 +1,27 @@
+{
+  "servers": [
+    {
+      "name": "web01",
+      "ip": "192.168.1.10",
+      "role": "webserver",
+      "status": "active"
+    },
+    {
+      "name": "web02",
+      "ip": "192.168.1.11",
+      "role": "webserver",
+      "status": "active"
+    },
+    {
+      "name": "db01",
+      "ip": "192.168.1.20",
+      "role": "database",
+      "status": "maintenance"
+    }
+  ],
+  "configuration": {
+    "max_connections": 1000,
+    "timeout": 30,
+    "ssl_enabled": true
+  }
+}

@@ -1,0 +1,26 @@
+---
+- name: Test Custom JSON Lookup Plugin
+  hosts: localhost
+  gather_facts: no
+
+  tasks:
+    - name: Load server data from JSON file
+      set_fact:
+        server_data: "{{ lookup('json_query', 'sample_data.json') }}"
+
+    - name: Display all servers
+      debug:
+        msg: "Server: {{ item.name }} ({{ item.ip }}) - {{ item.role }} - {{ item.status }}"
+      loop: "{{ server_data.servers }}"
+
+    - name: Show active web servers only
+      debug:
+        msg: "Active webserver: {{ item.name }}"
+      loop: "{{ server_data.servers }}"
+      when:
+        - item.role == "webserver"
+        - item.status == "active"
+
+    - name: Display configuration
+      debug:
+        msg: "Max connections: {{ server_data.configuration.max_connections }}"

@@ -1,0 +1,30 @@
+---
+- name: Test Custom Filters
+  hosts: webservers
+  gather_facts: no
+  vars:
+    sample_text: "Hello Ansible 2024"
+    disk_usage: 1073741824
+    completed_tasks: 75
+    total_tasks: 100
+
+  tasks:
+    - name: Test reverse string filter
+      debug:
+        msg: "Reversed: {{ sample_text | reverse_string }}"
+
+    - name: Extract numbers from text
+      debug:
+        msg: "Numbers found: {{ sample_text | extract_numbers }}"
+
+    - name: Calculate completion percentage
+      debug:
+        msg: "Progress: {{ completed_tasks | calculate_percentage(total_tasks) }}%"
+
+    - name: Format bytes to human readable
+      debug:
+        msg: "Disk usage: {{ disk_usage | format_bytes }}"
+
+    - name: Combine custom and built-in filters
+      debug:
+        msg: "Reversed uppercase: {{ sample_text | reverse_string | upper }}"

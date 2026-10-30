@@ -1,0 +1,40 @@
+---
+- name: Demonstrate String Filters
+  hosts: webservers
+  gather_facts: no
+  vars:
+    sample_text: "  Hello World from Ansible  "
+    server_name: "web-server-01"
+    email_address: "admin@example.com"
+    version_string: "2.4.1"
+
+  tasks:
+    - name: Display original string
+      debug:
+        msg: "Original: '{{ sample_text }}'"
+
+    - name: Apply trim filter
+      debug:
+        msg: "Trimmed: '{{ sample_text | trim }}'"
+
+    - name: Apply upper and lower case filters
+      debug:
+        msg:
+          - "Uppercase: {{ sample_text | trim | upper }}"
+          - "Lowercase: {{ sample_text | trim | lower }}"
+
+    - name: Apply replace filter
+      debug:
+        msg: "Replaced: {{ server_name | replace('-', '_') }}"
+
+    - name: Extract domain from email
+      debug:
+        msg: "Domain: {{ email_address | regex_replace('^.*@(.*)$', '\\1') }}"
+
+    - name: Split version string
+      debug:
+        msg: "Version parts: {{ version_string.split('.') }}"
+
+    - name: Get string length
+      debug:
+        msg: "Server name length: {{ server_name | length }}"
