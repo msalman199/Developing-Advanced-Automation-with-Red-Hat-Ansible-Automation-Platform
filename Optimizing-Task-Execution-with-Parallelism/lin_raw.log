@@ -1,0 +1,15 @@
+[WARNING]: Unhandled error in Python interpreter discovery for host node4:
+Failed to connect to the host via ssh: ssh: connect to host 192.168.1.13 port
+22: Connection timed out
+[WARNING]: Unhandled error in Python interpreter discovery for host node1:
+Failed to connect to the host via ssh: ssh: connect to host 192.168.1.10 port
+22: Connection timed out
+[WARNING]: Unhandled error in Python interpreter discovery for host node3:
+Failed to connect to the host via ssh: ssh: connect to host 192.168.1.12 port
+22: Connection timed out
+[WARNING]: Unhandled error in Python interpreter discovery for host node2:
+Failed to connect to the host via ssh: ssh: connect to host 192.168.1.11 port
+22: Connection timed out
+real 61.30
+user 5.43
+sys 1.07

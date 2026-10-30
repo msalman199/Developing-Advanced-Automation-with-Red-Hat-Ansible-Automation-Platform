@@ -1,0 +1,528 @@
+Lab 14: Optimizing Task Execution with Parallelism
+Objectives
+
+By the end of this lab, students will be able to:
+
+    Understand the concept of parallel execution in Ansible playbooks
+    Configure and implement parallel task execution using various Ansible strategies (linear, free, serial, async)
+    Modify existing playbooks to leverage parallelism for improved performance
+    Accurately measure and analyze performance improvements achieved through parallel execution
+    Apply best practices for optimizing playbook execution time and troubleshoot common parallelism issues
+
+Prerequisites
+
+Before starting this lab, students should have:
+
+    Basic understanding of Ansible playbooks, tasks, and modules
+    Familiarity with YAML syntax and Ansible inventory management
+    Experience writing and executing Ansible playbooks
+    Knowledge of Linux command-line operations and SSH key-based authentication
+    Completion of previous Ansible labs covering basic automation concepts
+
+Required software (install on the control node if not already present):
+
+sudo yum install -y ansible python3 python3-pip
+pip3 install --user jc
+
+Lab Environment Setup
+
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment - no need to build your own VM or install software.
+
+Your lab environment includes:
+
+    Control Node: CentOS/RHEL 8 with Ansible installed
+    Managed Nodes: 4 target servers (node1, node2, node3, node4)
+    Pre-configured SSH key authentication
+    Sample inventory files and basic playbooks
+
+Create the working directory and inventory before starting Task 1:
+
+mkdir -p /home/ansible/lab14-parallelism
+cd /home/ansible/lab14-parallelism
+
+cat > inventory.ini << 'EOF'
+[webservers]
+node1 ansible_host=192.168.1.10
+node2 ansible_host=192.168.1.11
+node3 ansible_host=192.168.1.12
+node4 ansible_host=192.168.1.13
+
+[all:vars]
+ansible_user=ansible
+ansible_ssh_private_key_file=/home/ansible/.ssh/id_rsa
+EOF
+
+ansible all -i inventory.ini -m ping
+
+Deliverable: inventory.ini exists and ansible all -i inventory.ini -m ping returns SUCCESS (pong) for node1 through node4.
+Task 1: Establishing a Sequential Baseline
+Subtask 1.1: Inspect Default Parallelism Settings
+
+    Check the current fork and strategy configuration:
+
+ansible-config dump | grep -i fork
+ansible-config dump | grep -i strategy
+
+Expected output shows DEFAULT_FORKS(default) = 5 and DEFAULT_STRATEGY(default) = linear. This confirms Ansible runs against at most 5 hosts concurrently using the linear strategy unless overridden.
+Subtask 1.2: Build and Time a Sequential Playbook
+
+Sequential timing must be measured from outside the playbook, using the shell's time command, so the measurement reflects real wall-clock elapsed time rather than a value computed inside a single task.
+
+    Create the sequential playbook:
+
+cat > sequential-playbook.yml << 'EOF'
+---
+- name: Sequential Task Execution Baseline
+  hosts: webservers
+  gather_facts: yes
+  serial: 1
+
+  tasks:
+    - name: Install packages sequentially
+      yum:
+        name:
+          - htop
+          - tree
+          - wget
+          - curl
+        state: present
+      become: yes
+
+    - name: Create multiple directories
+      file:
+        path: "/tmp/test_dir_{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+
+    - name: Download test files
+      get_url:
+        url: "https://httpbin.org/delay/2"
+        dest: "/tmp/test_file_{{ inventory_hostname }}.json"
+        timeout: 30
+
+    - name: Simulate processing time
+      command: sleep 3
+      changed_when: false
+EOF
+
+    Execute and capture the elapsed time using the shell, redirecting the time output to a file so it can be parsed later:
+
+{ time ansible-playbook -i inventory.ini sequential-playbook.yml ; } 2> sequential_time.log
+cat sequential_time.log
+
+Deliverable: sequential_time.log contains a real, user, sys line block, for example real 0m47.312s. Record the real value; this is your sequential baseline (expect roughly 40-55 seconds with serial: 1 across 4 hosts, since each host is fully processed before the next begins).
+Task 2: Implementing Parallel Execution Strategies
+Subtask 2.1: Configure Fork-Based Parallelism
+
+    Create ansible.cfg with increased forks and SSH optimizations:
+
+cat > ansible.cfg << 'EOF'
+[defaults]
+inventory = inventory.ini
+host_key_checking = False
+forks = 10
+timeout = 30
+gathering = smart
+fact_caching = memory
+
+[ssh_connection]
+ssh_args = -o ControlMaster=auto -o ControlPersist=60s
+pipelining = True
+EOF
+
+    Create a parallel playbook that runs the identical workload under the linear strategy, benefiting from higher forks (all 4 hosts execute each task simultaneously instead of one at a time):
+
+cat > parallel-forks-playbook.yml << 'EOF'
+---
+- name: Parallel Task Execution with Forks
+  hosts: webservers
+  gather_facts: yes
+  strategy: linear
+
+  tasks:
+    - name: Install packages in parallel
+      yum:
+        name:
+          - htop
+          - tree
+          - wget
+          - curl
+        state: present
+      become: yes
+
+    - name: Create multiple directories in parallel
+      file:
+        path: "/tmp/parallel_dir_{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+
+    - name: Download test files in parallel
+      get_url:
+        url: "https://httpbin.org/delay/2"
+        dest: "/tmp/parallel_file_{{ inventory_hostname }}.json"
+        timeout: 30
+
+    - name: Simulate processing time
+      command: sleep 3
+      changed_when: false
+EOF
+
+    Execute and capture timing the same way:
+
+{ time ansible-playbook parallel-forks-playbook.yml ; } 2> parallel_time.log
+cat parallel_time.log
+
+Deliverable: parallel_time.log shows a real time noticeably lower than sequential_time.log (expect roughly 12-16 seconds, since all 4 hosts now execute each task concurrently instead of sequentially).
+Subtask 2.2: Implement Free Strategy for Maximum Parallelism
+
+The free strategy allows each host to progress through the task list independently, without waiting for slower hosts to catch up on each task.
+
+    Create the free-strategy playbook:
+
+cat > free-strategy-playbook.yml << 'EOF'
+---
+- name: Free Strategy Parallel Execution
+  hosts: webservers
+  gather_facts: yes
+  strategy: free
+
+  tasks:
+    - name: Install packages with free strategy
+      yum:
+        name:
+          - htop
+          - tree
+          - wget
+          - curl
+          - vim
+        state: present
+      become: yes
+
+    - name: Create directories independently
+      file:
+        path: "/tmp/free_dir_{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+
+    - name: Download files independently
+      get_url:
+        url: "https://httpbin.org/delay/2"
+        dest: "/tmp/free_file_{{ inventory_hostname }}.json"
+        timeout: 30
+
+    - name: Variable processing time per host
+      command: "sleep {{ (ansible_play_hosts.index(inventory_hostname) | int) + 2 }}"
+      changed_when: false
+EOF
+
+    Execute and time it:
+
+{ time ansible-playbook free-strategy-playbook.yml ; } 2> free_time.log
+cat free_time.log
+
+Deliverable: free_time.log shows a real time similar to or slightly better than parallel_time.log, since faster hosts no longer wait for node1's longer sleep before moving to the next task.
+Subtask 2.3: Optimize with Asynchronous Tasks
+
+    Create an asynchronous playbook where long tasks run in the background while other work proceeds:
+
+cat > async-playbook.yml << 'EOF'
+---
+- name: Asynchronous Task Execution
+  hosts: webservers
+  gather_facts: yes
+
+  tasks:
+    - name: Start long-running task asynchronously
+      command: "sleep {{ 10 + (ansible_play_hosts.index(inventory_hostname) | int) * 2 }}"
+      async: 30
+      poll: 0
+      register: long_task
+
+    - name: Start file download asynchronously
+      get_url:
+        url: "https://httpbin.org/delay/5"
+        dest: "/tmp/async_download_{{ inventory_hostname }}.json"
+        timeout: 60
+      async: 70
+      poll: 0
+      register: download_task
+
+    - name: Perform other work while async tasks run
+      file:
+        path: "/tmp/async_work_{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - 1
+        - 2
+        - 3
+
+    - name: Install packages while waiting
+      yum:
+        name:
+          - nc
+          - telnet
+        state: present
+      become: yes
+
+    - name: Wait for long-running task to finish
+      async_status:
+        jid: "{{ long_task.ansible_job_id }}"
+      register: long_task_result
+      until: long_task_result.finished
+      retries: 30
+      delay: 1
+
+    - name: Wait for download task to finish
+      async_status:
+        jid: "{{ download_task.ansible_job_id }}"
+      register: download_result
+      until: download_result.finished
+      retries: 70
+      delay: 1
+
+    - name: Display results
+      debug:
+        msg:
+          - "Long task rc: {{ long_task_result.rc | default('N/A') }}"
+          - "Download task rc: {{ download_result.rc | default('N/A') }}"
+EOF
+
+    Execute and time it:
+
+{ time ansible-playbook async-playbook.yml ; } 2> async_time.log
+cat async_time.log
+
+Deliverable: async_time.log shows real time close to the duration of the longest async task rather than the sum of all task durations, since the "other work" tasks and package installs run while the sleep and download continue in the background.
+Task 3: Measuring and Comparing Performance Accurately
+Subtask 3.1: Build a Correct Timing Harness
+
+Ansible facts such as ansible_date_time.epoch are captured once per host during the gather_facts step at the start of a play. Using set_fact with lookup('pipe', 'date +%s') inside the same task block does not measure elapsed time between two points in a playbook â�� it only captures the instant that specific task runs. To get a reliable, reproducible measurement, timing must be done outside Ansible, wrapping the entire ansible-playbook invocation with the shell time builtin (as done in Tasks 1 and 2), or by writing start/end timestamps to a file from the control node before and after invoking ansible-playbook.
+
+    Create a shared workload tasks file used by every comparison run:
+
+cat > workload-tasks.yml << 'EOF'
+---
+- name: CPU intensive task
+  command: "dd if=/dev/zero of=/tmp/test_{{ test_name }}_{{ inventory_hostname }} bs=1M count=50"
+  changed_when: false
+
+- name: Create test directories
+  file:
+    path: "/tmp/{{ test_name }}_dir_{{ item }}_{{ inventory_hostname }}"
+    state: directory
+  loop:
+    - 1
+    - 2
+    - 3
+
+- name: Network operation simulation
+  uri:
+    url: "https://httpbin.org/delay/1"
+    method: GET
+    timeout: 10
+  ignore_errors: yes
+
+- name: Cleanup test file
+  file:
+    path: "/tmp/test_{{ test_name }}_{{ inventory_hostname }}"
+    state: absent
+EOF
+
+    Create three minimal playbooks that each run only the workload, under a different strategy, with no internal timing logic:
+
+cat > compare-sequential.yml << 'EOF'
+---
+- name: Performance Comparison - Sequential
+  hosts: webservers
+  gather_facts: no
+  serial: 1
+  vars:
+    test_name: "sequential"
+  tasks:
+    - include_tasks: workload-tasks.yml
+EOF
+
+cat > compare-linear.yml << 'EOF'
+---
+- name: Performance Comparison - Linear
+  hosts: webservers
+  gather_facts: no
+  strategy: linear
+  vars:
+    test_name: "linear"
+  tasks:
+    - include_tasks: workload-tasks.yml
+EOF
+
+cat > compare-free.yml << 'EOF'
+---
+- name: Performance Comparison - Free
+  hosts: webservers
+  gather_facts: no
+  strategy: free
+  vars:
+    test_name: "free"
+  tasks:
+    - include_tasks: workload-tasks.yml
+EOF
+
+Subtask 3.2: Run the Comparison and Compute Real Improvement Percentages
+
+    Create a driver script that wraps each playbook with the shell time command, extracts the real seconds using jc, and computes improvement percentages against the sequential baseline:
+
+cat > run_comparison.sh << 'EOF'
+#!/bin/bash
+set -euo pipefail
+
+run_and_time() {
+  local playbook=$1
+  local logfile=$2
+  { /usr/bin/time -p ansible-playbook -i inventory.ini "$playbook" > /dev/null ; } 2> "$logfile"
+  grep '^real' "$logfile" | awk '{print $2}'
+}
+
+echo "Running sequential baseline..."
+SEQ_TIME=$(run_and_time compare-sequential.yml seq_raw.log)
+
+echo "Running linear strategy..."
+LIN_TIME=$(run_and_time compare-linear.yml lin_raw.log)
+
+echo "Running free strategy..."
+FREE_TIME=$(run_and_time compare-free.yml free_raw.log)
+
+echo "=== PERFORMANCE COMPARISON RESULTS ===" | tee comparison_results.txt
+echo "Sequential execution time: ${SEQ_TIME}s" | tee -a comparison_results.txt
+echo "Linear execution time:     ${LIN_TIME}s" | tee -a comparison_results.txt
+echo "Free execution time:       ${FREE_TIME}s" | tee -a comparison_results.txt
+
+python3 - "$SEQ_TIME" "$LIN_TIME" "$FREE_TIME" << 'PYEOF' | tee -a comparison_results.txt
+import sys
+seq, lin, free = (float(x) for x in sys.argv[1:4])
+lin_improvement = ((seq - lin) / seq) * 100
+free_improvement = ((seq - free) / seq) * 100
+print(f"Linear improvement over sequential: {lin_improvement:.2f}%")
+print(f"Free strategy improvement over sequential: {free_improvement:.2f}%")
+PYEOF
+
+echo "=== END RESULTS ===" | tee -a comparison_results.txt
+EOF
+
+chmod +x run_comparison.sh
+./run_comparison.sh
+
+Deliverable: comparison_results.txt contains three real elapsed times and two improvement percentages, for example:
+
+=== PERFORMANCE COMPARISON RESULTS ===
+Sequential execution time: 41.20s
+Linear execution time:     13.85s
+Free execution time:       11.60s
+Linear improvement over sequential: 66.38%
+Free strategy improvement over sequential: 71.84%
+=== END RESULTS ===
+
+Because every timing figure now comes from the shell time command wrapped around the entire ansible-playbook invocation, these percentages reflect genuine wall-clock improvement rather than an artifact of when a set_fact task happened to execute.
+Subtask 3.3: Verify Race-Condition Handling Under Parallelism
+
+Free-strategy and high-fork execution can expose race conditions when multiple hosts write to a shared resource. Demonstrate and then correct this.
+
+    Run a playbook where all hosts append to one shared file on node1 without serialization:
+
+cat > race-condition-demo.yml << 'EOF'
+---
+- name: Demonstrate Race Condition
+  hosts: webservers
+  gather_facts: yes
+  strategy: free
+
+  tasks:
+    - name: Ensure shared resource exists
+      file:
+        path: "/tmp/shared_resource.txt"
+        state: touch
+      delegate_to: "{{ groups['webservers'][0] }}"
+      run_once: true
+
+    - name: Concurrent writers without locking
+      lineinfile:
+        path: "/tmp/shared_resource.txt"
+        line: "{{ inventory_hostname }} wrote at {{ ansible_date_time.iso8601 }}"
+        create: yes
+      delegate_to: "{{ groups['webservers'][0] }}"
+EOF
+
+ansible-playbook race-condition-demo.yml
+
+    Retrieve the shared file with a correctly formed fetch command (use one module flag per invocation, never combine -m command and -m fetch in the same call):
+
+ansible node1 -i inventory.ini -m fetch -a "src=/tmp/shared_resource.txt dest=./fetched_shared_resource.txt flat=yes"
+cat fetched_shared_resource.txt
+
+If you only need to view the file contents remotely without copying it locally, use the command module on its own instead:
+
+ansible node1 -i inventory.ini -m command -a "cat /tmp/shared_resource.txt"
+
+    Now apply throttle: 1 to serialize writes and confirm every host's line appears exactly once, in order:
+
+cat > race-condition-fixed.yml << 'EOF'
+---
+- name: Fixed Concurrent Write Handling
+  hosts: webservers
+  gather_facts: yes
+  strategy: free
+
+  tasks:
+    - name: Reset shared resource
+      file:
+        path: "/tmp/shared_resource_fixed.txt"
+        state: touch
+      delegate_to: "{{ groups['webservers'][0] }}"
+      run_once: true
+
+    - name: Serialized writers using throttle
+      lineinfile:
+        path: "/tmp/shared_resource_fixed.txt"
+        line: "{{ inventory_hostname }} wrote at {{ ansible_date_time.iso8601 }}"
+      delegate_to: "{{ groups['webservers'][0] }}"
+      throttle: 1
+EOF
+
+ansible-playbook race-condition-fixed.yml
+ansible node1 -i inventory.ini -m fetch -a "src=/tmp/shared_resource_fixed.txt dest=./fetched_shared_resource_fixed.txt flat=yes"
+cat fetched_shared_resource_fixed.txt
+
+Deliverable: fetched_shared_resource_fixed.txt contains exactly four lines, one per host (node1 through node4), with no missing or corrupted entries, demonstrating that throttle: 1 eliminated the race condition present in the unthrottled version.
+Expected Outcomes
+
+    A set of working playbooks demonstrating sequential, linear-parallel, free-strategy, and asynchronous execution against the same workload
+    A comparison_results.txt file containing accurate wall-clock timings and correctly computed improvement percentages for linear and free strategies versus the sequential baseline
+    Verified, reproducible evidence that throttle: 1 resolves a race condition on a shared resource that otherwise occurs under the free strategy
+
+Troubleshooting
+
+    If your comparison_results.txt shows the free strategy performing worse than linear, investigate: how many forks does your ansible.cfg currently allow, and is that number smaller than the number of hosts in your inventory? What happens if you raise forks and rerun run_comparison.sh?
+    If fetched_shared_resource_fixed.txt is missing lines from one or more hosts, check whether delegate_to in your playbook actually points at a single consistent host across all runs, and whether any earlier failed run left stale lock files or partially written data in /tmp on the delegated host. What would you inspect first to confirm the root cause?
+
+Conclusion
+
+In this lab, students moved from a naive sequential Ansible baseline to multiple parallel execution strategies, including increased forks with the linear strategy, the free strategy, and asynchronous task execution, applying each to an identical workload for a fair comparison. Students then built a timing harness that measures elapsed wall-clock time from outside the playbook using the shell time command rather than relying on in-playbook fact timestamps, producing trustworthy improvement percentages instead of misleading ones. Finally, students reproduced a real race condition caused by unsynchronized concurrent writes under the free strategy and resolved it using throttle: 1, verifying the fix by fetching and inspecting the shared file with correctly formed ansible ad hoc commands. Going forward, students should apply this same rigor, measuring outside the automation tool and validating shared-resource access, whenever tuning parallelism in production Ansible environments.

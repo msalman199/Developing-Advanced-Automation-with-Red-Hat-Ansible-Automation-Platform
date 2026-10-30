@@ -1,0 +1,9 @@
+---
+- name: Performance Comparison - Sequential
+  hosts: webservers
+  gather_facts: no
+  serial: 1
+  vars:
+    test_name: "sequential"
+  tasks:
+    - include_tasks: workload-tasks.yml

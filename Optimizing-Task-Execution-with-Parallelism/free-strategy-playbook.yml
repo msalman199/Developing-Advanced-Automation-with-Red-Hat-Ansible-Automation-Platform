@@ -1,0 +1,41 @@
+---
+- name: Free Strategy Parallel Execution
+  hosts: webservers
+  gather_facts: yes
+  strategy: free
+
+  tasks:
+    - name: Install packages with free strategy
+      yum:
+        name:
+          - htop
+          - tree
+          - wget
+          - curl
+          - vim
+        state: present
+      become: yes
+
+    - name: Create directories independently
+      file:
+        path: "/tmp/free_dir_{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+
+    - name: Download files independently
+      get_url:
+        url: "https://httpbin.org/delay/2"
+        dest: "/tmp/free_file_{{ inventory_hostname }}.json"
+        timeout: 30
+
+    - name: Variable processing time per host
+      command: "sleep {{ (ansible_play_hosts.index(inventory_hostname) | int) + 2 }}"
+      changed_when: false

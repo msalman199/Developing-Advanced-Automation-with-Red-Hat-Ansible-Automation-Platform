@@ -1,0 +1,25 @@
+---
+- name: CPU intensive task
+  command: "dd if=/dev/zero of=/tmp/test_{{ test_name }}_{{ inventory_hostname }} bs=1M count=50"
+  changed_when: false
+
+- name: Create test directories
+  file:
+    path: "/tmp/{{ test_name }}_dir_{{ item }}_{{ inventory_hostname }}"
+    state: directory
+  loop:
+    - 1
+    - 2
+    - 3
+
+- name: Network operation simulation
+  uri:
+    url: "https://httpbin.org/delay/1"
+    method: GET
+    timeout: 10
+  ignore_errors: yes
+
+- name: Cleanup test file
+  file:
+    path: "/tmp/test_{{ test_name }}_{{ inventory_hostname }}"
+    state: absent

@@ -1,0 +1,9 @@
+---
+- name: Performance Comparison - Linear
+  hosts: webservers
+  gather_facts: no
+  strategy: linear
+  vars:
+    test_name: "linear"
+  tasks:
+    - include_tasks: workload-tasks.yml

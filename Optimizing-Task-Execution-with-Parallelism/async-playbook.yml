@@ -1,0 +1,60 @@
+---
+- name: Asynchronous Task Execution
+  hosts: webservers
+  gather_facts: yes
+
+  tasks:
+    - name: Start long-running task asynchronously
+      command: "sleep {{ 10 + (ansible_play_hosts.index(inventory_hostname) | int) * 2 }}"
+      async: 30
+      poll: 0
+      register: long_task
+
+    - name: Start file download asynchronously
+      get_url:
+        url: "https://httpbin.org/delay/5"
+        dest: "/tmp/async_download_{{ inventory_hostname }}.json"
+        timeout: 60
+      async: 70
+      poll: 0
+      register: download_task
+
+    - name: Perform other work while async tasks run
+      file:
+        path: "/tmp/async_work_{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - 1
+        - 2
+        - 3
+
+    - name: Install packages while waiting
+      yum:
+        name:
+          - nc
+          - telnet
+        state: present
+      become: yes
+
+    - name: Wait for long-running task to finish
+      async_status:
+        jid: "{{ long_task.ansible_job_id }}"
+      register: long_task_result
+      until: long_task_result.finished
+      retries: 30
+      delay: 1
+
+    - name: Wait for download task to finish
+      async_status:
+        jid: "{{ download_task.ansible_job_id }}"
+      register: download_result
+      until: download_result.finished
+      retries: 70
+      delay: 1
+
+    - name: Display results
+      debug:
+        msg:
+          - "Long task rc: {{ long_task_result.rc | default('N/A') }}"
+          - "Download task rc: {{ download_result.rc | default('N/A') }}"

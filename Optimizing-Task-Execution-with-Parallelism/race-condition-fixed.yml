@@ -1,0 +1,20 @@
+---
+- name: Fixed Concurrent Write Handling
+  hosts: webservers
+  gather_facts: yes
+  strategy: free
+
+  tasks:
+    - name: Reset shared resource
+      file:
+        path: "/tmp/shared_resource_fixed.txt"
+        state: touch
+      delegate_to: "{{ groups['webservers'][0] }}"
+      run_once: true
+
+    - name: Serialized writers using throttle
+      lineinfile:
+        path: "/tmp/shared_resource_fixed.txt"
+        line: "{{ inventory_hostname }} wrote at {{ ansible_date_time.iso8601 }}"
+      delegate_to: "{{ groups['webservers'][0] }}"
+      throttle: 1
