@@ -1,0 +1,55 @@
+---
+- name: Handling Task Failures with ignore_errors
+  hosts: webservers
+  become: yes
+  
+  tasks:
+    - name: Task 1 - Always succeeds
+      debug:
+        msg: "Starting execution on {{ inventory_hostname }}"
+    
+    - name: Task 2 - Install valid package
+      package:
+        name: curl
+        state: present
+      register: curl_install
+      
+    - name: Task 3 - Try to install invalid package (ignore failure)
+      package:
+        name: nonexistent-package-12345
+        state: present
+      register: invalid_package
+      ignore_errors: yes
+      
+    - name: Task 4 - Report on invalid package attempt
+      debug:
+        msg: "Invalid package installation failed as expected: {{ invalid_package.msg }}"
+      when: invalid_package is failed
+      
+    - name: Task 5 - Try to start non-existent service (ignore failure)
+      service:
+        name: nonexistent-service
+        state: started
+      register: invalid_service
+      ignore_errors: yes
+      
+    - name: Task 6 - Continue with valid operations
+      debug:
+        msg: "Continuing execution despite previous failures"
+        
+    - name: Task 7 - Install and start Apache
+      block:
+        - name: Install Apache
+          package:
+            name: httpd
+            state: present
+            
+        - name: Start Apache service
+          service:
+            name: httpd
+            state: started
+            enabled: yes
+      
+    - name: Task 8 - Final status report
+      debug:
+        msg: "Playbook completed successfully on {{ inventory_hostname }}"

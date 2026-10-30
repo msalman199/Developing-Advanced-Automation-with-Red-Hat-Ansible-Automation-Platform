@@ -1,0 +1,114 @@
+---
+- name: Comprehensive Error Reporting
+  hosts: webservers
+  become: yes
+  vars:
+    log_file: "/var/log/ansible-error-report.log"
+    
+  tasks:
+    - name: Initialize error tracking
+      set_fact:
+        error_count: 0
+        errors_encountered: []
+        
+    - name: Test 1 - Package installation
+      package:
+        name: "{{ item }}"
+        state: present
+      register: package_test
+      ignore_errors: yes
+      loop:
+        - curl
+        - wget
+        - invalid-package-name
+        
+    - name: Record package errors
+      set_fact:
+        error_count: "{{ error_count | int + 1 }}"
+        errors_encountered: "{{ errors_encountered + [{'task': 'Package Installation', 'item': item.item, 'error': item.msg}] }}"
+      when: item is failed
+      loop: "{{ package_test.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+        
+    - name: Test 2 - Service operations
+      service:
+        name: "{{ item }}"
+        state: started
+      register: service_test
+      ignore_errors: yes
+      loop:
+        - sshd
+        - nonexistent-service
+        
+    - name: Record service errors
+      set_fact:
+        error_count: "{{ error_count | int + 1 }}"
+        errors_encountered: "{{ errors_encountered + [{'task': 'Service Operation', 'item': item.item, 'error': item.msg}] }}"
+      when: item is failed
+      loop: "{{ service_test.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+        
+    - name: Test 3 - File operations
+      file:
+        path: "{{ item }}"
+        state: touch
+      register: file_test
+      ignore_errors: yes
+      loop:
+        - /tmp/test-file.txt
+        - /root/restricted-file.txt
+        - /invalid/path/file.txt
+        
+    - name: Record file operation errors
+      set_fact:
+        error_count: "{{ error_count | int + 1 }}"
+        errors_encountered: "{{ errors_encountered + [{'task': 'File Operation', 'item': item.item, 'error': item.msg}] }}"
+      when: item is failed
+      loop: "{{ file_test.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+        
+    - name: Generate error report
+      template:
+        content: |
+          ========================================
+          ANSIBLE ERROR REPORT
+          ========================================
+          Host: {{ inventory_hostname }}
+          Date: {{ ansible_date_time.iso8601 }}
+          Total Errors: {{ error_count }}
+          
+          {% if errors_encountered | length > 0 %}
+          ERRORS ENCOUNTERED:
+          {% for error in errors_encountered %}
+          
+          Task: {{ error.task }}
+          Item: {{ error.item }}
+          Error: {{ error.error }}
+          ---
+          {% endfor %}
+          {% else %}
+          No errors encountered during execution.
+          {% endif %}
+          
+          ========================================
+        dest: "{{ log_file }}"
+        
+    - name: Display error summary
+      debug:
+        msg: |
+          Error Summary for {{ inventory_hostname }}:
+          - Total errors: {{ error_count }}
+          - Error report saved to: {{ log_file }}
+          {% if error_count | int > 0 %}
+          - Review the log file for detailed error information
+          {% else %}
+          - All tasks completed successfully
+          {% endif %}
+          
+    - name: Fail playbook if critical errors found
+      fail:
+        msg: "Playbook failed due to {{ error_count }} errors. Check {{ log_file }} for details."
+      when: error_count | int > 3

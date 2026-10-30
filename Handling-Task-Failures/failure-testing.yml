@@ -1,0 +1,72 @@
+---
+- name: Comprehensive Failure Testing
+  hosts: webservers
+  become: yes
+  vars:
+    test_scenarios:
+      - name: "Network Timeout"
+        type: "network"
+      - name: "File Permission"
+        type: "permission"
+      - name: "Service Dependency"
+        type: "dependency"
+        
+  tasks:
+    - name: Scenario 1 - Network timeout with custom failure handling
+      uri:
+        url: "http://httpbin.org/delay/10"
+        timeout: 3
+      register: network_timeout
+      failed_when: false
+      changed_when: network_timeout.status == 200
+      
+    - name: Report network test results
+      debug:
+        msg: |
+          Network test results:
+          - Status: {{ network_timeout.status | default('Failed') }}
+          - Failed: {{ network_timeout is failed }}
+          - Message: {{ network_timeout.msg | default('No message') }}
+    
+    - name: Scenario 2 - File operation with permission handling
+      file:
+        path: /root/test-file.txt
+        state: touch
+        mode: '0644'
+        owner: root
+        group: root
+      register: file_operation
+      ignore_errors: yes
+      
+    - name: Handle file operation results
+      debug:
+        msg: "File operation {{ 'succeeded' if file_operation is succeeded else 'failed' }}"
+        
+    - name: Scenario 3 - Command execution with error handling
+      command: /bin/false
+      register: command_result
+      failed_when: command_result.rc > 1
+      changed_when: false
+      
+    - name: Scenario 4 - Package management with conditional failure
+      package:
+        name: "{{ item }}"
+        state: present
+      register: package_results
+      failed_when: false
+      loop:
+        - curl
+        - wget
+        - nonexistent-package-xyz
+        
+    - name: Report package installation results
+      debug:
+        msg: |
+          Package: {{ item.item }}
+          Status: {{ 'Success' if item is succeeded else 'Failed' }}
+          {% if item is failed %}
+          Error: {{ item.msg }}
+          {% endif %}
+      loop: "{{ package_results.results }}"
+      loop_control:
+        label: "{{ item.item }}"

@@ -1,0 +1,64 @@
+---
+- name: Custom Failure Conditions
+  hosts: webservers
+  become: yes
+  
+  tasks:
+    - name: Check disk space
+      shell: df -h / | tail -1 | awk '{print $5}' | sed 's/%//'
+      register: disk_usage
+      changed_when: false
+      failed_when: disk_usage.stdout | int > 90
+      
+    - name: Report disk usage
+      debug:
+        msg: "Disk usage is {{ disk_usage.stdout }}% - {{ 'WARNING: High usage!' if disk_usage.stdout | int > 80 else 'OK' }}"
+        
+    - name: Check memory usage
+      shell: free | grep Mem | awk '{printf "%.0f", $3/$2 * 100.0}'
+      register: memory_usage
+      changed_when: false
+      failed_when: memory_usage.stdout | int > 95
+      
+    - name: Check system load
+      shell: uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | sed 's/,//'
+      register: system_load
+      changed_when: false
+      failed_when: system_load.stdout | float > 5.0
+      
+    - name: Verify critical services
+      command: systemctl is-active {{ item }}
+      register: service_status
+      changed_when: false
+      failed_when: service_status.stdout != "active"
+      ignore_errors: yes
+      loop:
+        - sshd
+        - NetworkManager
+        - systemd-logind
+        
+    - name: Report service status
+      debug:
+        msg: "Service {{ item.item }}: {{ item.stdout }}"
+      loop: "{{ service_status.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+        
+    - name: Custom application health check
+      uri:
+        url: "http://{{ inventory_hostname }}"
+        method: GET
+        status_code: [200, 404]
+      register: app_health
+      failed_when: 
+        - app_health.status is defined
+        - app_health.status not in [200, 404]
+      ignore_errors: yes
+      
+    - name: Conditional task based on previous results
+      debug:
+        msg: "All system checks passed for {{ inventory_hostname }}"
+      when: 
+        - disk_usage.stdout | int < 90
+        - memory_usage.stdout | int < 95
+        - system_load.stdout | float < 5.0
