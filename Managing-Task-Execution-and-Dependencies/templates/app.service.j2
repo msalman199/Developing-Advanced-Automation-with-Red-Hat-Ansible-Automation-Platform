@@ -1,0 +1,15 @@
+[Unit]
+Description={{ app_name }} Application
+After=network.target
+
+[Service]
+Type=simple
+User={{ app_name }}
+Group={{ app_name }}
+WorkingDirectory=/opt/{{ app_name }}
+ExecStart=/usr/bin/python3 /opt/{{ app_name }}/app.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

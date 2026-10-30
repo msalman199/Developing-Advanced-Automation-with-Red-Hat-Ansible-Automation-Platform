@@ -1,0 +1,56 @@
+---
+- name: Basic Conditional Task Execution
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  vars:
+    install_web_server: true
+    deployment_environment: "production"
+    server_role: "web"
+
+  tasks:
+
+    - name: Validate deployment parameters
+      assert:
+        that:
+          - deployment_environment in ['development', 'staging', 'production']
+        fail_msg: "Invalid deployment parameters"
+        success_msg: "Deployment parameters are valid"
+
+    - name: Install Apache when web server installation is enabled
+      package:
+        name: httpd
+        state: present
+      when: install_web_server | bool
+
+    - name: Start Apache service in production environment
+      service:
+        name: httpd
+        state: started
+        enabled: yes
+      when:
+        - install_web_server | bool
+        - deployment_environment == "production"
+
+    - name: Create web content for web servers only
+      copy:
+        content: |
+          <html>
+          <head><title>{{ inventory_hostname }}</title></head>
+          <body>
+            <h1>Welcome to {{ inventory_hostname }}</h1>
+            <p>Server Role: {{ server_role }}</p>
+            <p>Environment: {{ deployment_environment }}</p>
+          </body>
+          </html>
+        dest: /var/www/html/index.html
+      when: server_role == "web"
+      notify: restart apache
+
+  handlers:
+    - name: restart apache
+      service:
+        name: httpd
+        state: restarted
+

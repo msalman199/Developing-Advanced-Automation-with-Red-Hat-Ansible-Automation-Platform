@@ -1,0 +1,18 @@
+Deployment Report
+=================
+
+Application Details:
+- Name: {{ app_name }}
+- Version: {{ app_version }}
+- Environment: {{ environment }}
+- Deployment Date: {{ ansible_date_time.iso8601 }}
+- Target Host: {{ inventory_hostname }}
+
+Components Deployed:
+- Base Packages: Installed
+- Application Code: Deployed
+- Configuration: {{ 'Completed' if enable_monitoring else 'Pending' }}
+- Database: {{ 'Configured' if database_required else 'Not Required' }}
+- Services: Running
+
+Status: Deployment Successful

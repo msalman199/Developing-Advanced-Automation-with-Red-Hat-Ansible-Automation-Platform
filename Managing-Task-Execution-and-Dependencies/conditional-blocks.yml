@@ -1,0 +1,61 @@
+---
+- name: Conditional Task Blocks with Rescue
+  hosts: all
+  gather_facts: yes
+  vars:
+    deploy_application: true
+    security_hardening: true
+
+  tasks:
+    - name: Web Application Deployment Block
+      block:
+        - name: Install web server packages
+          package:
+            name: httpd
+            state: present
+
+        - name: Create application directory
+          file:
+            path: /opt/webapp
+            state: directory
+            mode: '0755'
+
+        - name: Deploy application start script
+          copy:
+            content: |
+              #!/bin/bash
+              echo "Web Application Started"
+              echo "Timestamp: $(date)"
+            dest: /opt/webapp/start.sh
+            mode: '0755'
+
+      when: deploy_application | bool
+      rescue:
+        - name: Handle deployment failure
+          debug:
+            msg: "Web application deployment failed, rolling back."
+
+        - name: Remove application directory on failure
+          file:
+            path: /opt/webapp
+            state: absent
+      always:
+        - name: Log deployment attempt
+          lineinfile:
+            path: /var/log/deployment.log
+            line: "{{ ansible_date_time.iso8601 }} - Web deployment attempted on {{ inventory_hostname }}"
+            create: yes
+
+    - name: Security Hardening Block
+      block:
+        - name: Install fail2ban package
+          package:
+            name: fail2ban
+            state: present
+
+        - name: Start fail2ban service
+          service:
+            name: fail2ban
+            state: started
+            enabled: yes
+      when: security_hardening | bool

@@ -1,0 +1,52 @@
+---
+- name: Task Dependencies and Order Management
+  hosts: all
+  gather_facts: yes
+  vars:
+    web_service_port: 8080
+
+  tasks:
+    - name: Install required packages
+      package:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - python3
+        - python3-pip
+        - git
+      register: package_installation
+
+    - name: Create application user
+      user:
+        name: webapp
+        system: yes
+        shell: /sbin/nologin
+        home: /opt/webapp
+        create_home: yes
+      register: user_creation
+
+    - name: Create application configuration
+      copy:
+        content: |
+          # Application Configuration
+          PORT={{ web_service_port }}
+          HOST=0.0.0.0
+        dest: /opt/webapp/config.env
+        owner: webapp
+        group: webapp
+        mode: '0644'
+      notify:
+        - update application permissions
+        - report configuration change
+
+  handlers:
+    - name: update application permissions
+      file:
+        path: /opt/webapp
+        owner: webapp
+        group: webapp
+        recurse: yes
+
+    - name: report configuration change
+      debug:
+        msg: "Configuration was updated on {{ inventory_hostname }} at {{ ansible_date_time.iso8601 }}"

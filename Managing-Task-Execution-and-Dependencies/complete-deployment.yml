@@ -1,0 +1,118 @@
+---
+- name: Complete Application Deployment with Dependencies
+  hosts: all
+  gather_facts: yes
+  vars:
+    app_name: "webapp"
+    app_version: "1.0.0"
+    environment: "production"
+    enable_monitoring: true
+    database_required: false
+
+  pre_tasks:
+    - name: Validate deployment parameters
+      assert:
+        that:
+          - app_name is defined
+          - app_version is defined
+          - environment in ['development', 'staging', 'production']
+        fail_msg: "Invalid deployment parameters"
+
+    - name: Create deployment log directory
+      file:
+        path: /var/log/deployment
+        state: directory
+        mode: '0755'
+
+  tasks:
+    - name: System Preparation Phase
+      block:
+        - name: Install base packages
+          package:
+            name:
+              - python3
+              - python3-pip
+              - git
+            state: present
+          register: base_packages
+
+        - name: Create application user
+          user:
+            name: "{{ app_name }}"
+            system: yes
+            shell: /sbin/nologin
+            home: "/opt/{{ app_name }}"
+            create_home: yes
+
+        - name: Create application directories
+          file:
+            path: "{{ item }}"
+            state: directory
+            owner: "{{ app_name }}"
+            group: "{{ app_name }}"
+            mode: '0755'
+          loop:
+            - "/opt/{{ app_name }}/logs"
+            - "/opt/{{ app_name }}/config"
+
+      tags: preparation
+
+    - name: Application Deployment Phase
+      block:
+        - name: Install Flask python package
+          pip:
+            name:
+              - flask
+            state: present
+          register: python_deps
+
+        - name: Deploy application code
+          template:
+            src: application.py.j2
+            dest: "/opt/{{ app_name }}/app.py"
+            owner: "{{ app_name }}"
+            group: "{{ app_name }}"
+            mode: '0755'
+          when: python_deps is succeeded
+          notify: restart application
+
+        - name: Create systemd service
+          template:
+            src: app.service.j2
+            dest: "/etc/systemd/system/{{ app_name }}.service"
+            mode: '0644'
+          notify:
+            - reload systemd
+            - restart application
+
+      when: base_packages is succeeded
+      tags: application
+
+  post_tasks:
+    - name: Check application service status
+      service_facts:
+
+    - name: Generate deployment report
+      template:
+        src: deployment_report.txt.j2
+        dest: "/var/log/deployment/{{ app_name }}-{{ ansible_date_time.epoch }}.txt"
+
+    - name: Display deployment summary
+      debug:
+        msg: |
+          Deployment Summary:
+          - Application: {{ app_name }} v{{ app_version }}
+          - Environment: {{ environment }}
+          - Database: {{ 'Configured' if database_required else 'Not Required' }}
+          - Monitoring: {{ 'Enabled' if enable_monitoring else 'Disabled' }}
+
+  handlers:
+    - name: reload systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: restart application
+      service:
+        name: "{{ app_name }}"
+        state: restarted
+        enabled: yes

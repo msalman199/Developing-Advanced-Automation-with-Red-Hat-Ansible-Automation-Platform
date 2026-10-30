@@ -1,0 +1,547 @@
+Lab 13: Managing Task Execution and Dependencies
+Objectives
+
+By the end of this lab, students will be able to:
+
+    Implement conditional task execution in Ansible using when clauses
+    Control task execution flow based on variables, facts, and registered results
+    Use handlers to manage dependent task execution and service restarts
+    Build complex automation workflows using block, rescue, and always
+    Deploy a small multi-component application with correctly sequenced tasks
+
+Prerequisites
+
+Before starting this lab, students should have:
+
+    Basic understanding of Ansible playbooks and YAML syntax
+    Familiarity with Ansible variables and facts
+    Experience with basic Ansible modules (copy, service, package, etc.)
+    A working Ansible control node with at least one managed node reachable over SSH
+
+Install Ansible on the control node if it is not already installed:
+
+sudo dnf install -y ansible
+ansible --version
+
+This lab environment uses a control node with Ansible installed and one or more managed nodes defined in an inventory file. All work is performed in an isolated practice environment owned by the student.
+Lab Environment Setup
+
+Create a working directory and a simple inventory file pointing at your managed node(s). Replace node1 with the actual hostname or IP address of your managed node, and adjust ansible_user as needed.
+
+mkdir -p ~/lab13-dependencies
+cd ~/lab13-dependencies
+cat > inventory << 'EOF'
+[web]
+node1 ansible_host=127.0.0.1 ansible_connection=local
+
+[web:vars]
+ansible_python_interpreter=/usr/bin/python3
+EOF
+
+The sample inventory above uses ansible_connection=local so the lab can be completed on a single machine without extra SSH setup. If you have real managed nodes available, replace the inventory entries with their addresses and remove the ansible_connection=local line.
+
+Verify connectivity:
+
+ansible -i inventory web -m ping
+
+Expected result: each host returns "ping": "pong" with a SUCCESS status.
+Task 1: Conditional Task Execution with When Clauses
+Subtask 1.1: Basic When Clauses
+
+    Create the playbook file:
+
+vim conditional-basics.yml
+
+    Add the following content:
+
+---
+- name: Basic Conditional Task Execution
+  hosts: all
+  gather_facts: yes
+  vars:
+    install_web_server: true
+    deployment_environment: "production"
+    server_role: "web"
+
+  tasks:
+    - name: Install Apache when web server installation is enabled
+      package:
+        name: httpd
+        state: present
+      when: install_web_server | bool
+
+    - name: Start Apache service in production environment
+      service:
+        name: httpd
+        state: started
+        enabled: yes
+      when:
+        - install_web_server | bool
+        - deployment_environment == "production"
+
+    - name: Create web content for web servers only
+      copy:
+        content: |
+          <html>
+          <head><title>{{ inventory_hostname }}</title></head>
+          <body>
+            <h1>Welcome to {{ inventory_hostname }}</h1>
+            <p>Server Role: {{ server_role }}</p>
+            <p>Environment: {{ deployment_environment }}</p>
+          </body>
+          </html>
+        dest: /var/www/html/index.html
+      when: server_role == "web"
+      notify: restart apache
+
+  handlers:
+    - name: restart apache
+      service:
+        name: httpd
+        state: restarted
+      when: install_web_server | bool
+
+    Run the playbook with become privileges (package and service management require root):
+
+ansible-playbook -i inventory conditional-basics.yml --become
+
+Expected result: the play completes with ok or changed for all tasks, httpd is installed and running, and /var/www/html/index.html exists on the managed node with the rendered hostname and role.
+Subtask 1.2: Advanced Conditional Logic
+
+    Create a second playbook:
+
+vim advanced-conditionals.yml
+
+    Add the following content:
+
+---
+- name: Advanced Conditional Task Execution
+  hosts: all
+  gather_facts: yes
+  vars:
+    database_servers: []
+    backup_enabled: true
+
+  tasks:
+    - name: Set server type based on inventory hostname
+      set_fact:
+        server_type: "{{ 'database' if inventory_hostname in database_servers else 'web' }}"
+
+    - name: Install Apache on web servers
+      package:
+        name: httpd
+        state: present
+      when: server_type == "web"
+
+    - name: Create backup directory when backup is enabled
+      file:
+        path: /opt/backups
+        state: directory
+        mode: '0755'
+      when: backup_enabled | bool
+
+    - name: Install backup tool based on server type
+      package:
+        name: "{{ 'mariadb' if server_type == 'database' else 'rsync' }}"
+        state: present
+      when: backup_enabled | bool
+
+    - name: Display conditional execution results
+      debug:
+        msg: >
+          Server: {{ inventory_hostname }},
+          Type: {{ server_type }},
+          Backup Enabled: {{ backup_enabled }},
+          OS Family: {{ ansible_facts['os_family'] }}
+
+    Run it:
+
+ansible-playbook -i inventory advanced-conditionals.yml --become
+
+Deliverable for Task 1: both playbooks run successfully with no failed tasks, /opt/backups exists on the managed node, and the debug task prints a message showing the resolved server_type for each host.
+
+Expected result: PLAY RECAP shows failed=0 for all hosts, and the debug output confirms Type: web since database_servers is empty in this inventory.
+Task 2: Task Dependencies with Handlers and Blocks
+Subtask 2.1: Handlers and Task Ordering
+
+Handlers are Ansible's primary mechanism for making one task's execution depend on whether an earlier task reported a change.
+
+    Create the dependencies playbook:
+
+vim task-dependencies.yml
+
+    Add the following content:
+
+---
+- name: Task Dependencies and Order Management
+  hosts: all
+  gather_facts: yes
+  vars:
+    web_service_port: 8080
+
+  tasks:
+    - name: Install required packages
+      package:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - python3
+        - python3-pip
+        - git
+      register: package_installation
+
+    - name: Create application user
+      user:
+        name: webapp
+        system: yes
+        shell: /sbin/nologin
+        home: /opt/webapp
+        create_home: yes
+      register: user_creation
+
+    - name: Create application configuration
+      copy:
+        content: |
+          # Application Configuration
+          PORT={{ web_service_port }}
+          HOST=0.0.0.0
+        dest: /opt/webapp/config.env
+        owner: webapp
+        group: webapp
+        mode: '0644'
+      notify:
+        - update application permissions
+        - report configuration change
+
+  handlers:
+    - name: update application permissions
+      file:
+        path: /opt/webapp
+        owner: webapp
+        group: webapp
+        recurse: yes
+
+    - name: report configuration change
+      debug:
+        msg: "Configuration was updated on {{ inventory_hostname }} at {{ ansible_date_time.iso8601 }}"
+
+    Run the playbook:
+
+ansible-playbook -i inventory task-dependencies.yml --become
+
+Expected result: on the first run, the copy task reports changed, which triggers both handlers in the order listed (update application permissions runs before report configuration change). Running the playbook a second time shows the copy task as ok (not changed), and the handlers do not run at all, demonstrating handler dependency on change state.
+Subtask 2.2: Task Blocks with Error Handling
+
+    Create a blocks playbook:
+
+vim conditional-blocks.yml
+
+    Add the following content:
+
+---
+- name: Conditional Task Blocks with Rescue
+  hosts: all
+  gather_facts: yes
+  vars:
+    deploy_application: true
+    security_hardening: true
+
+  tasks:
+    - name: Web Application Deployment Block
+      block:
+        - name: Install web server packages
+          package:
+            name: httpd
+            state: present
+
+        - name: Create application directory
+          file:
+            path: /opt/webapp
+            state: directory
+            mode: '0755'
+
+        - name: Deploy application start script
+          copy:
+            content: |
+              #!/bin/bash
+              echo "Web Application Started"
+              echo "Timestamp: $(date)"
+            dest: /opt/webapp/start.sh
+            mode: '0755'
+
+      when: deploy_application | bool
+      rescue:
+        - name: Handle deployment failure
+          debug:
+            msg: "Web application deployment failed, rolling back."
+
+        - name: Remove application directory on failure
+          file:
+            path: /opt/webapp
+            state: absent
+      always:
+        - name: Log deployment attempt
+          lineinfile:
+            path: /var/log/deployment.log
+            line: "{{ ansible_date_time.iso8601 }} - Web deployment attempted on {{ inventory_hostname }}"
+            create: yes
+
+    - name: Security Hardening Block
+      block:
+        - name: Install fail2ban package
+          package:
+            name: fail2ban
+            state: present
+
+        - name: Start fail2ban service
+          service:
+            name: fail2ban
+            state: started
+            enabled: yes
+      when: security_hardening | bool
+
+    Run it:
+
+ansible-playbook -i inventory conditional-blocks.yml --become
+
+Deliverable for Task 2: task-dependencies.yml shows correct handler firing behavior across two runs, and conditional-blocks.yml completes with /opt/webapp/start.sh present, /var/log/deployment.log containing one timestamped line per run, and fail2ban installed and running.
+
+Expected result: PLAY RECAP reports failed=0 for both playbooks, and cat /var/log/deployment.log shows an appended entry each time the block playbook runs.
+Task 3: Practical Implementation Exercise
+Subtask 3.1: Complete Application Deployment
+
+This task combines conditionals, blocks, handlers, and templates into a single deployment playbook.
+
+    Prepare the application directory and requirements file. Because /opt/webapp requires root privileges to create, use sudo directly on the control node's shell for this preparatory step (the playbook itself uses become for its own tasks):
+
+sudo mkdir -p /opt/webapp
+sudo bash -c 'cat > /opt/webapp/requirements.txt << EOF
+Flask==2.3.3
+PyMySQL==1.1.0
+EOF'
+
+Verify the file was created correctly:
+
+cat /opt/webapp/requirements.txt
+
+Expected output:
+
+Flask==2.3.3
+PyMySQL==1.1.0
+
+    Create a templates directory and the required Jinja2 templates:
+
+mkdir -p templates
+
+    Create the application template:
+
+vim templates/application.py.j2
+
+#!/usr/bin/env python3
+from flask import Flask, jsonify
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return jsonify({
+        'application': '{{ app_name }}',
+        'version': '{{ app_version }}',
+        'environment': '{{ environment }}',
+        'status': 'running'
+    })
+
+@app.route('/health')
+def health():
+    return jsonify({'status': 'healthy'}), 200
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+
+    Create the systemd service template:
+
+vim templates/app.service.j2
+
+[Unit]
+Description={{ app_name }} Application
+After=network.target
+
+[Service]
+Type=simple
+User={{ app_name }}
+Group={{ app_name }}
+WorkingDirectory=/opt/{{ app_name }}
+ExecStart=/usr/bin/python3 /opt/{{ app_name }}/app.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+
+    Create the deployment report template:
+
+vim templates/deployment_report.txt.j2
+
+Deployment Report
+=================
+
+Application Details:
+- Name: {{ app_name }}
+- Version: {{ app_version }}
+- Environment: {{ environment }}
+- Deployment Date: {{ ansible_date_time.iso8601 }}
+- Target Host: {{ inventory_hostname }}
+
+Components Deployed:
+- Base Packages: Installed
+- Application Code: Deployed
+- Configuration: {{ 'Completed' if enable_monitoring else 'Pending' }}
+- Database: {{ 'Configured' if database_required else 'Not Required' }}
+- Services: Running
+
+Status: Deployment Successful
+
+    Create the main deployment playbook:
+
+vim complete-deployment.yml
+
+---
+- name: Complete Application Deployment with Dependencies
+  hosts: all
+  gather_facts: yes
+  vars:
+    app_name: "webapp"
+    app_version: "1.0.0"
+    environment: "production"
+    enable_monitoring: true
+    database_required: false
+
+  pre_tasks:
+    - name: Validate deployment parameters
+      assert:
+        that:
+          - app_name is defined
+          - app_version is defined
+          - environment in ['development', 'staging', 'production']
+        fail_msg: "Invalid deployment parameters"
+
+    - name: Create deployment log directory
+      file:
+        path: /var/log/deployment
+        state: directory
+        mode: '0755'
+
+  tasks:
+    - name: System Preparation Phase
+      block:
+        - name: Install base packages
+          package:
+            name:
+              - python3
+              - python3-pip
+              - git
+            state: present
+          register: base_packages
+
+        - name: Create application user
+          user:
+            name: "{{ app_name }}"
+            system: yes
+            shell: /sbin/nologin
+            home: "/opt/{{ app_name }}"
+            create_home: yes
+
+        - name: Create application directories
+          file:
+            path: "{{ item }}"
+            state: directory
+            owner: "{{ app_name }}"
+            group: "{{ app_name }}"
+            mode: '0755'
+          loop:
+            - "/opt/{{ app_name }}/logs"
+            - "/opt/{{ app_name }}/config"
+
+      tags: preparation
+
+    - name: Application Deployment Phase
+      block:
+        - name: Install Flask python package
+          pip:
+            name:
+              - flask
+            state: present
+          register: python_deps
+
+        - name: Deploy application code
+          template:
+            src: application.py.j2
+            dest: "/opt/{{ app_name }}/app.py"
+            owner: "{{ app_name }}"
+            group: "{{ app_name }}"
+            mode: '0755'
+          when: python_deps is succeeded
+          notify: restart application
+
+        - name: Create systemd service
+          template:
+            src: app.service.j2
+            dest: "/etc/systemd/system/{{ app_name }}.service"
+            mode: '0644'
+          notify:
+            - reload systemd
+            - restart application
+
+      when: base_packages is succeeded
+      tags: application
+
+  post_tasks:
+    - name: Check application service status
+      service_facts:
+
+    - name: Generate deployment report
+      template:
+        src: deployment_report.txt.j2
+        dest: "/var/log/deployment/{{ app_name }}-{{ ansible_date_time.epoch }}.txt"
+
+    - name: Display deployment summary
+      debug:
+        msg: |
+          Deployment Summary:
+          - Application: {{ app_name }} v{{ app_version }}
+          - Environment: {{ environment }}
+          - Database: {{ 'Configured' if database_required else 'Not Required' }}
+          - Monitoring: {{ 'Enabled' if enable_monitoring else 'Disabled' }}
+
+  handlers:
+    - name: reload systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: restart application
+      service:
+        name: "{{ app_name }}"
+        state: restarted
+        enabled: yes
+
+    Run the complete deployment playbook:
+
+ansible-playbook -i inventory complete-deployment.yml --become
+
+Deliverable for Task 3: the play completes with failed=0, /opt/webapp/app.py and the webapp systemd service both exist on the managed node, and a deployment report file exists under /var/log/deployment/ containing the completed status block ending in Status: Deployment Successful.
+
+Expected result: run sudo systemctl status webapp on the managed node to confirm the service is active (running), and run cat /var/log/deployment/webapp-*.txt to confirm the report was generated without any unrendered Jinja2 syntax.
+Expected Outcomes
+
+    Two conditional playbooks (conditional-basics.yml, advanced-conditionals.yml) that execute tasks selectively based on variables and facts
+    A handler-driven playbook (task-dependencies.yml) demonstrating change-based task dependency, plus a block/rescue/always playbook (conditional-blocks.yml)
+    A fully working complete-deployment.yml that provisions a Flask application as a systemd service and produces a valid deployment report
+
+Troubleshooting
+
+    Symptom: a task fails with Missing sudo password or a permission denied error when installing packages or writing to /opt or /etc. Diagnostic hint: check whether you passed --become on the ansible-playbook command line and whether the connecting user has passwordless sudo configured on the managed node.
+    Symptom: a handler does not appear to run even though you expected a configuration change. Diagnostic hint: handlers only fire when the notifying task reports changed; re-run with -v and inspect whether the notifying task actually shows changed in its result, and confirm the handler name in notify matches the handler's name exactly.
+
+Conclusion
+
+In this lab, you built and ran a series of Ansible playbooks that progressively introduced conditional task execution with when clauses, task ordering and dependency management through handlers, and resilient workflows using block, rescue, and always. You then combined these techniques into a single deployment playbook that installed prerequisites, deployed a Flask application as a systemd service, and generated a deployment report using a Jinja2 template. Along the way you practiced diagnosing common real-world issues such as missing privilege escalation and handlers not firing due to unchanged task state. These patterns of conditional logic, ordered dependencies, and error-handled blocks are foundational to writing production-grade Ansible automation that can be safely and predictably re-run against live infrastructure.

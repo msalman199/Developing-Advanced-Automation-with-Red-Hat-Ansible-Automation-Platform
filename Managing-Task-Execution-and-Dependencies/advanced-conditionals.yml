@@ -1,0 +1,39 @@
+---
+- name: Advanced Conditional Task Execution
+  hosts: all
+  gather_facts: yes
+  vars:
+    database_servers: []
+    backup_enabled: true
+
+  tasks:
+    - name: Set server type based on inventory hostname
+      set_fact:
+        server_type: "{{ 'database' if inventory_hostname in database_servers else 'web' }}"
+
+    - name: Install Apache on web servers
+      package:
+        name: httpd
+        state: present
+      when: server_type == "web"
+
+    - name: Create backup directory when backup is enabled
+      file:
+        path: /opt/backups
+        state: directory
+        mode: '0755'
+      when: backup_enabled | bool
+
+    - name: Install backup tool based on server type
+      package:
+        name: "{{ 'mariadb' if server_type == 'database' else 'rsync' }}"
+        state: present
+      when: backup_enabled | bool
+
+    - name: Display conditional execution results
+      debug:
+        msg: >
+          Server: {{ inventory_hostname }},
+          Type: {{ server_type }},
+          Backup Enabled: {{ backup_enabled }},
+          OS Family: {{ ansible_facts['os_family'] }}
