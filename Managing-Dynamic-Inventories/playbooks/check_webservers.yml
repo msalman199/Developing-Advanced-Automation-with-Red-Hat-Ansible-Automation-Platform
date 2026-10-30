@@ -1,0 +1,12 @@
+---
+- name: Check Web Servers from Dynamic Inventory
+  hosts: webservers
+  gather_facts: no
+
+  tasks:
+    - name: Report group membership and EC2 metadata
+      debug:
+        msg: |
+          Host {{ inventory_hostname }} is in groups: {{ group_names | join(', ') }}
+          Instance Type: {{ ec2_instance_type | default('N/A') }}
+          Availability Zone: {{ ec2_az | default('N/A') }}

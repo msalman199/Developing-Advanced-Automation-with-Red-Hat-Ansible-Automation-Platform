@@ -1,0 +1,949 @@
+Lab 17: Managing Rolling Updates with Ansible
+Objectives
+
+By the end of this lab, you will be able to:
+
+    Understand the concepts of rolling updates and their importance in production environments
+    Create Ansible playbooks that implement rolling update strategies
+    Implement canary deployment patterns using Ansible
+    Configure sequential execution to minimize service disruption
+    Use Ansible's built-in features for managing update batches and failure handling
+    Monitor and validate rolling updates during execution
+
+Prerequisites
+
+Before starting this lab, you should have:
+
+    Basic understanding of Ansible concepts (playbooks, inventory, modules)
+    Familiarity with YAML syntax
+    Knowledge of Linux system administration
+    Understanding of web services and load balancing concepts
+    Experience with SSH and basic networking concepts
+
+Lab Environment Setup
+
+Ready-to-Use Cloud Machines: Al Nafi provides Linux-based cloud machines for this lab. Simply click Start Lab to access your pre-configured environment. No need to build your own VM or install additional software.
+
+Your lab environment includes:
+
+    1 Ansible Control Node (ansible-controller)
+    4 Target Web Servers (web01, web02, web03, web04)
+    1 Load Balancer (loadbalancer)
+    Pre-installed Ansible, Nginx, and necessary tools
+
+Task 1: Create a Playbook for Rolling Updates
+Subtask 1.1: Understanding Rolling Updates
+
+Rolling updates allow you to update your application or infrastructure gradually, ensuring that some instances remain available while others are being updated. This approach minimizes downtime and reduces risk.
+
+Key Benefits:
+
+    Zero or minimal downtime
+    Gradual risk exposure
+    Easy rollback capabilities
+    Continuous service availability
+
+Subtask 1.2: Set Up the Lab Environment
+
+First, let's verify our environment and set up the necessary files.
+
+    Connect to the Ansible Control Node:
+
+# Verify Ansible installation
+ansible --version
+
+# Check inventory
+ansible all -m ping
+
+    Create the project directory structure:
+
+mkdir -p ~/rolling-updates-lab
+cd ~/rolling-updates-lab
+
+# Create directory structure
+mkdir -p {playbooks,inventory,templates,files}
+
+    Create the inventory file:
+
+cat > inventory/hosts.yml << 'EOF'
+all:
+  children:
+    webservers:
+      hosts:
+        web01:
+          ansible_host: 10.0.1.10
+        web02:
+          ansible_host: 10.0.1.11
+        web03:
+          ansible_host: 10.0.1.12
+        web04:
+          ansible_host: 10.0.1.13
+    loadbalancer:
+      hosts:
+        lb01:
+          ansible_host: 10.0.1.20
+  vars:
+    ansible_user: ec2-user
+    ansible_ssh_private_key_file: ~/.ssh/lab-key.pem
+EOF
+
+Subtask 1.3: Create a Simple Web Application
+
+Let's create a simple web application that we'll use for our rolling updates.
+
+    Create an HTML template:
+
+cat > templates/index.html.j2 << 'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Rolling Update Demo - Version {{ app_version }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+        .version { color: {{ version_color | default('blue') }}; font-size: 24px; }
+        .server { color: green; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <h1>Rolling Update Demo</h1>
+    <p class="version">Application Version: {{ app_version }}</p>
+    <p class="server">Server: {{ inventory_hostname }}</p>
+    <p>Deployment Time: {{ ansible_date_time.iso8601 }}</p>
+</body>
+</html>
+EOF
+
+    Create the initial deployment playbook:
+
+cat > playbooks/deploy-app.yml << 'EOF'
+---
+- name: Deploy Web Application
+  hosts: webservers
+  become: yes
+  vars:
+    app_version: "1.0.0"
+    version_color: "blue"
+    
+  tasks:
+    - name: Install Nginx
+      package:
+        name: nginx
+        state: present
+        
+    - name: Start and enable Nginx
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+        
+    - name: Deploy application
+      template:
+        src: ../templates/index.html.j2
+        dest: /var/www/html/index.html
+        owner: nginx
+        group: nginx
+        mode: '0644'
+      notify: restart nginx
+      
+    - name: Ensure Nginx is running
+      service:
+        name: nginx
+        state: started
+        
+  handlers:
+    - name: restart nginx
+      service:
+        name: nginx
+        state: restarted
+EOF
+
+    Deploy the initial application:
+
+ansible-playbook -i inventory/hosts.yml playbooks/deploy-app.yml
+
+Subtask 1.4: Create the Rolling Update Playbook
+
+Now let's create a sophisticated rolling update playbook with proper error handling and validation.
+
+cat > playbooks/rolling-update.yml << 'EOF'
+---
+- name: Rolling Update with Health Checks
+  hosts: webservers
+  become: yes
+  serial: 1  # Update one server at a time
+  max_fail_percentage: 25  # Allow up to 25% failures
+  
+  vars:
+    app_version: "{{ new_version | default('2.0.0') }}"
+    version_color: "{{ new_color | default('green') }}"
+    health_check_url: "http://{{ inventory_hostname }}"
+    health_check_retries: 5
+    health_check_delay: 10
+    
+  pre_tasks:
+    - name: Display update information
+      debug:
+        msg: "Starting rolling update for {{ inventory_hostname }} to version {{ app_version }}"
+        
+    - name: Verify server is reachable
+      wait_for_connection:
+        timeout: 30
+        
+  tasks:
+    - name: Remove server from load balancer
+      uri:
+        url: "http://{{ hostvars['lb01']['ansible_host'] }}/disable/{{ inventory_hostname }}"
+        method: POST
+      delegate_to: lb01
+      ignore_errors: yes
+      
+    - name: Wait for connections to drain
+      wait_for:
+        timeout: 30
+      delegate_to: localhost
+      
+    - name: Create backup of current version
+      copy:
+        src: /var/www/html/index.html
+        dest: /var/www/html/index.html.backup
+        remote_src: yes
+        
+    - name: Deploy new version
+      template:
+        src: ../templates/index.html.j2
+        dest: /var/www/html/index.html
+        owner: nginx
+        group: nginx
+        mode: '0644'
+        backup: yes
+      notify: restart nginx
+      
+    - name: Flush handlers to restart nginx
+      meta: flush_handlers
+      
+    - name: Wait for Nginx to be ready
+      wait_for:
+        port: 80
+        host: "{{ inventory_hostname }}"
+        delay: 5
+        timeout: 60
+        
+    - name: Perform health check
+      uri:
+        url: "{{ health_check_url }}"
+        method: GET
+        status_code: 200
+      register: health_check
+      retries: "{{ health_check_retries }}"
+      delay: "{{ health_check_delay }}"
+      until: health_check.status == 200
+      
+    - name: Validate application version
+      uri:
+        url: "{{ health_check_url }}"
+        method: GET
+        return_content: yes
+      register: version_check
+      failed_when: app_version not in version_check.content
+      
+    - name: Add server back to load balancer
+      uri:
+        url: "http://{{ hostvars['lb01']['ansible_host'] }}/enable/{{ inventory_hostname }}"
+        method: POST
+      delegate_to: lb01
+      ignore_errors: yes
+      
+  post_tasks:
+    - name: Final health verification
+      uri:
+        url: "{{ health_check_url }}"
+        method: GET
+        status_code: 200
+      register: final_check
+      
+    - name: Update completion notification
+      debug:
+        msg: "Successfully updated {{ inventory_hostname }} to version {{ app_version }}"
+        
+  handlers:
+    - name: restart nginx
+      service:
+        name: nginx
+        state: restarted
+        
+  rescue:
+    - name: Rollback on failure
+      copy:
+        src: /var/www/html/index.html.backup
+        dest: /var/www/html/index.html
+        remote_src: yes
+      when: health_check is failed
+      
+    - name: Restart nginx after rollback
+      service:
+        name: nginx
+        state: restarted
+      when: health_check is failed
+      
+    - name: Notify rollback
+      debug:
+        msg: "Rolled back {{ inventory_hostname }} due to health check failure"
+      when: health_check is failed
+EOF
+
+Task 2: Implement Canary Deployment and Sequential Execution
+Subtask 2.1: Understanding Canary Deployments
+
+A canary deployment is a technique where you deploy a new version to a small subset of servers first, test it thoroughly, and then gradually roll it out to the rest of the infrastructure.
+Subtask 2.2: Create Canary Deployment Playbook
+
+cat > playbooks/canary-deployment.yml << 'EOF'
+---
+- name: Canary Deployment Strategy
+  hosts: localhost
+  gather_facts: no
+  vars:
+    app_version: "{{ new_version | default('3.0.0') }}"
+    version_color: "{{ new_color | default('red') }}"
+    canary_percentage: "{{ canary_percent | default(25) }}"
+    
+  tasks:
+    - name: Calculate canary servers
+      set_fact:
+        total_servers: "{{ groups['webservers'] | length }}"
+        canary_count: "{{ ((groups['webservers'] | length) * (canary_percentage | int) / 100) | round(0, 'ceil') | int }}"
+        
+    - name: Display canary deployment info
+      debug:
+        msg: 
+          - "Total servers: {{ total_servers }}"
+          - "Canary percentage: {{ canary_percentage }}%"
+          - "Canary servers count: {{ canary_count }}"
+          - "Deploying version: {{ app_version }}"
+
+- name: Phase 1 - Canary Deployment
+  hosts: webservers[0:{{ hostvars['localhost']['canary_count'] | int - 1 }}]
+  become: yes
+  serial: 1
+  vars:
+    app_version: "{{ hostvars['localhost']['app_version'] }}"
+    version_color: "{{ hostvars['localhost']['version_color'] }}"
+    
+  tasks:
+    - name: Deploy to canary servers
+      include_tasks: ../tasks/deploy-with-checks.yml
+      
+    - name: Canary health monitoring
+      uri:
+        url: "http://{{ inventory_hostname }}"
+        method: GET
+        return_content: yes
+      register: canary_health
+      retries: 3
+      delay: 10
+      
+    - name: Validate canary deployment
+      assert:
+        that:
+          - canary_health.status == 200
+          - app_version in canary_health.content
+        fail_msg: "Canary deployment failed validation"
+        success_msg: "Canary server {{ inventory_hostname }} validated successfully"
+
+- name: Phase 2 - Canary Validation and Monitoring
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Wait for canary monitoring period
+      pause:
+        prompt: "Canary deployment complete. Monitor for {{ canary_monitor_time | default(300) }} seconds. Press enter to continue with full deployment or Ctrl+C to abort"
+        
+    - name: Perform comprehensive canary tests
+      uri:
+        url: "http://{{ item }}"
+        method: GET
+        status_code: 200
+      loop: "{{ groups['webservers'][0:canary_count | int] }}"
+      register: canary_tests
+      
+    - name: Evaluate canary success
+      set_fact:
+        canary_success: "{{ canary_tests.results | selectattr('status', 'equalto', 200) | list | length == canary_count | int }}"
+        
+    - name: Abort if canary failed
+      fail:
+        msg: "Canary deployment failed. Aborting full rollout."
+      when: not canary_success
+
+- name: Phase 3 - Full Deployment
+  hosts: webservers[{{ hostvars['localhost']['canary_count'] | int }}:]
+  become: yes
+  serial: "{{ batch_size | default(2) }}"
+  vars:
+    app_version: "{{ hostvars['localhost']['app_version'] }}"
+    version_color: "{{ hostvars['localhost']['version_color'] }}"
+    
+  tasks:
+    - name: Deploy to remaining servers
+      include_tasks: ../tasks/deploy-with-checks.yml
+      
+    - name: Final validation
+      uri:
+        url: "http://{{ inventory_hostname }}"
+        method: GET
+        return_content: yes
+      register: final_validation
+      
+    - name: Confirm deployment success
+      debug:
+        msg: "Successfully deployed version {{ app_version }} to {{ inventory_hostname }}"
+EOF
+
+Subtask 2.3: Create Reusable Deployment Tasks
+
+Create a reusable task file for deployment with health checks:
+
+mkdir -p tasks
+cat > tasks/deploy-with-checks.yml << 'EOF'
+---
+- name: Pre-deployment health check
+  uri:
+    url: "http://{{ inventory_hostname }}"
+    method: GET
+    status_code: 200
+  register: pre_deploy_health
+  ignore_errors: yes
+  
+- name: Remove from load balancer
+  uri:
+    url: "http://{{ hostvars['lb01']['ansible_host'] }}/disable/{{ inventory_hostname }}"
+    method: POST
+  delegate_to: lb01
+  ignore_errors: yes
+  
+- name: Wait for connection draining
+  pause:
+    seconds: 15
+    
+- name: Backup current version
+  copy:
+    src: /var/www/html/index.html
+    dest: "/var/www/html/index.html.backup.{{ ansible_date_time.epoch }}"
+    remote_src: yes
+    
+- name: Deploy new application version
+  template:
+    src: ../templates/index.html.j2
+    dest: /var/www/html/index.html
+    owner: nginx
+    group: nginx
+    mode: '0644'
+  notify: restart nginx
+  
+- name: Restart nginx service
+  service:
+    name: nginx
+    state: restarted
+    
+- name: Wait for service to be ready
+  wait_for:
+    port: 80
+    host: "{{ inventory_hostname }}"
+    delay: 5
+    timeout: 60
+    
+- name: Post-deployment health check
+  uri:
+    url: "http://{{ inventory_hostname }}"
+    method: GET
+    status_code: 200
+    return_content: yes
+  register: post_deploy_health
+  retries: 5
+  delay: 10
+  until: post_deploy_health.status == 200
+  
+- name: Verify version deployment
+  assert:
+    that:
+      - app_version in post_deploy_health.content
+    fail_msg: "Version verification failed for {{ inventory_hostname }}"
+    success_msg: "Version {{ app_version }} successfully deployed to {{ inventory_hostname }}"
+    
+- name: Add back to load balancer
+  uri:
+    url: "http://{{ hostvars['lb01']['ansible_host'] }}/enable/{{ inventory_hostname }}"
+    method: POST
+  delegate_to: lb01
+  ignore_errors: yes
+EOF
+
+Subtask 2.4: Create Advanced Rolling Update with Blue-Green Strategy
+
+cat > playbooks/blue-green-rolling.yml << 'EOF'
+---
+- name: Blue-Green Rolling Deployment
+  hosts: localhost
+  gather_facts: no
+  vars:
+    app_version: "{{ new_version | default('4.0.0') }}"
+    version_color: "{{ new_color | default('purple') }}"
+    
+  tasks:
+    - name: Divide servers into blue and green groups
+      set_fact:
+        blue_servers: "{{ groups['webservers'][::2] }}"  # Even indexed servers
+        green_servers: "{{ groups['webservers'][1::2] }}" # Odd indexed servers
+        
+    - name: Display deployment strategy
+      debug:
+        msg:
+          - "Blue servers (deploy first): {{ blue_servers }}"
+          - "Green servers (deploy second): {{ green_servers }}"
+          - "Version: {{ app_version }}"
+
+- name: Deploy to Blue Servers
+  hosts: "{{ hostvars['localhost']['blue_servers'] }}"
+  become: yes
+  serial: 1
+  vars:
+    app_version: "{{ hostvars['localhost']['app_version'] }}"
+    version_color: "{{ hostvars['localhost']['version_color'] }}"
+    deployment_phase: "blue"
+    
+  tasks:
+    - name: Blue phase deployment
+      include_tasks: ../tasks/deploy-with-checks.yml
+      
+    - name: Blue phase validation
+      uri:
+        url: "http://{{ inventory_hostname }}"
+        method: GET
+        return_content: yes
+      register: blue_validation
+      
+    - name: Log blue deployment success
+      debug:
+        msg: "Blue server {{ inventory_hostname }} successfully updated to {{ app_version }}"
+
+- name: Validate Blue Deployment
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Comprehensive blue testing
+      uri:
+        url: "http://{{ item }}"
+        method: GET
+        status_code: 200
+        return_content: yes
+      loop: "{{ blue_servers }}"
+      register: blue_tests
+      
+    - name: Evaluate blue deployment
+      set_fact:
+        blue_success: "{{ blue_tests.results | selectattr('status', 'equalto', 200) | list | length == blue_servers | length }}"
+        
+    - name: Pause for blue validation
+      pause:
+        prompt: "Blue deployment complete. Validate application behavior. Press enter to continue with green deployment or Ctrl+C to abort"
+        
+    - name: Abort if blue deployment failed
+      fail:
+        msg: "Blue deployment validation failed. Aborting green deployment."
+      when: not blue_success
+
+- name: Deploy to Green Servers
+  hosts: "{{ hostvars['localhost']['green_servers'] }}"
+  become: yes
+  serial: 1
+  vars:
+    app_version: "{{ hostvars['localhost']['app_version'] }}"
+    version_color: "{{ hostvars['localhost']['version_color'] }}"
+    deployment_phase: "green"
+    
+  tasks:
+    - name: Green phase deployment
+      include_tasks: ../tasks/deploy-with-checks.yml
+      
+    - name: Green phase validation
+      uri:
+        url: "http://{{ inventory_hostname }}"
+        method: GET
+        return_content: yes
+      register: green_validation
+      
+    - name: Log green deployment success
+      debug:
+        msg: "Green server {{ inventory_hostname }} successfully updated to {{ app_version }}"
+
+- name: Final Deployment Validation
+  hosts: webservers
+  gather_facts: no
+  tasks:
+    - name: Final comprehensive health check
+      uri:
+        url: "http://{{ inventory_hostname }}"
+        method: GET
+        status_code: 200
+        return_content: yes
+      register: final_health
+      
+    - name: Deployment summary
+      debug:
+        msg: "All servers successfully updated to version {{ hostvars['localhost']['app_version'] }}"
+      run_once: true
+EOF
+
+Subtask 2.5: Create Rollback Playbook
+
+cat > playbooks/rollback.yml << 'EOF'
+---
+- name: Emergency Rollback Playbook
+  hosts: webservers
+  become: yes
+  serial: "{{ rollback_batch_size | default(2) }}"
+  vars:
+    rollback_version: "{{ target_version | default('1.0.0') }}"
+    
+  tasks:
+    - name: Find available backups
+      find:
+        paths: /var/www/html
+        patterns: "index.html.backup*"
+      register: backup_files
+      
+    - name: Display available backups
+      debug:
+        msg: "Available backups: {{ backup_files.files | map(attribute='path') | list }}"
+        
+    - name: Remove from load balancer
+      uri:
+        url: "http://{{ hostvars['lb01']['ansible_host'] }}/disable/{{ inventory_hostname }}"
+        method: POST
+      delegate_to: lb01
+      ignore_errors: yes
+      
+    - name: Perform rollback
+      copy:
+        src: "{{ backup_files.files | sort(attribute='mtime') | last | default('/var/www/html/index.html.backup') }}"
+        dest: /var/www/html/index.html
+        remote_src: yes
+      when: backup_files.files | length > 0
+      
+    - name: Restart nginx
+      service:
+        name: nginx
+        state: restarted
+        
+    - name: Verify rollback
+      uri:
+        url: "http://{{ inventory_hostname }}"
+        method: GET
+        status_code: 200
+      register: rollback_check
+      retries: 3
+      delay: 5
+      
+    - name: Add back to load balancer
+      uri:
+        url: "http://{{ hostvars['lb01']['ansible_host'] }}/enable/{{ inventory_hostname }}"
+        method: POST
+      delegate_to: lb01
+      ignore_errors: yes
+      
+    - name: Rollback confirmation
+      debug:
+        msg: "Successfully rolled back {{ inventory_hostname }}"
+EOF
+
+Testing and Validation
+Test the Rolling Update
+
+    Execute the rolling update:
+
+# Run rolling update with new version
+ansible-playbook -i inventory/hosts.yml playbooks/rolling-update.yml -e "new_version=2.0.0 new_color=green"
+
+    Test canary deployment:
+
+# Run canary deployment
+ansible-playbook -i inventory/hosts.yml playbooks/canary-deployment.yml -e "new_version=3.0.0 new_color=red canary_percent=25"
+
+    Test blue-green deployment:
+
+# Run blue-green deployment
+ansible-playbook -i inventory/hosts.yml playbooks/blue-green-rolling.yml -e "new_version=4.0.0 new_color=purple"
+
+    Test rollback functionality:
+
+# Perform rollback
+ansible-playbook -i inventory/hosts.yml playbooks/rollback.yml -e "target_version=1.0.0"
+
+Monitoring and Validation Commands
+
+# Check all servers status
+for server in web01 web02 web03 web04; do
+  echo "=== $server ==="
+  curl -s http://$server | grep -E "(Version|Server)"
+done
+
+# Monitor deployment progress
+watch -n 2 'for server in web01 web02 web03 web04; do echo "$server: $(curl -s http://$server | grep Version || echo "UNREACHABLE")"; done'
+
+Advanced Features and Best Practices
+Create a Comprehensive Deployment Script
+
+cat > scripts/deploy.sh << 'EOF'
+#!/bin/bash
+
+# Advanced Deployment Script with Rolling Updates
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Default values
+DEPLOYMENT_TYPE="rolling"
+APP_VERSION=""
+BATCH_SIZE="1"
+CANARY_PERCENT="25"
+HEALTH_CHECK_TIMEOUT="60"
+DRY_RUN="false"
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+usage() {
+    echo "Usage: $0 [OPTIONS]"
+    echo "Options:"
+    echo "  -t, --type TYPE          Deployment type (rolling|canary|blue-green) [default: rolling]"
+    echo "  -v, --version VERSION    Application version to deploy [required]"
+    echo "  -b, --batch-size SIZE    Batch size for rolling updates [default: 1]"
+    echo "  -c, --canary-percent %   Canary deployment percentage [default: 25]"
+    echo "  -d, --dry-run           Perform dry run without actual deployment"
+    echo "  -h, --help              Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0 -t rolling -v 2.0.0 -b 2"
+    echo "  $0 -t canary -v 3.0.0 -c 30"
+    echo "  $0 -t blue-green -v 4.0.0"
+}
+
+log() {
+    echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"
+}
+
+error() {
+    echo -e "${RED}[ERROR]${NC} $1" >&2
+}
+
+success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -t|--type)
+            DEPLOYMENT_TYPE="$2"
+            shift 2
+            ;;
+        -v|--version)
+            APP_VERSION="$2"
+            shift 2
+            ;;
+        -b|--batch-size)
+            BATCH_SIZE="$2"
+            shift 2
+            ;;
+        -c|--canary-percent)
+            CANARY_PERCENT="$2"
+            shift 2
+            ;;
+        -d|--dry-run)
+            DRY_RUN="true"
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            error "Unknown option: $1"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+# Validate required parameters
+if [[ -z "$APP_VERSION" ]]; then
+    error "Application version is required"
+    usage
+    exit 1
+fi
+
+# Validate deployment type
+case $DEPLOYMENT_TYPE in
+    rolling|canary|blue-green)
+        ;;
+    *)
+        error "Invalid deployment type: $DEPLOYMENT_TYPE"
+        usage
+        exit 1
+        ;;
+esac
+
+log "Starting $DEPLOYMENT_TYPE deployment for version $APP_VERSION"
+
+# Pre-deployment checks
+log "Performing pre-deployment checks..."
+
+# Check Ansible connectivity
+if ! ansible all -i "$PROJECT_DIR/inventory/hosts.yml" -m ping > /dev/null 2>&1; then
+    error "Ansible connectivity check failed"
+    exit 1
+fi
+
+# Check current application status
+log "Checking current application status..."
+ansible webservers -i "$PROJECT_DIR/inventory/hosts.yml" -m uri -a "url=http://{{ inventory_hostname }} method=GET" --one-line
+
+# Execute deployment based on type
+case $DEPLOYMENT_TYPE in
+    rolling)
+        PLAYBOOK="$PROJECT_DIR/playbooks/rolling-update.yml"
+        EXTRA_VARS="new_version=$APP_VERSION batch_size=$BATCH_SIZE"
+        ;;
+    canary)
+        PLAYBOOK="$PROJECT_DIR/playbooks/canary-deployment.yml"
+        EXTRA_VARS="new_version=$APP_VERSION canary_percent=$CANARY_PERCENT"
+        ;;
+    blue-green)
+        PLAYBOOK="$PROJECT_DIR/playbooks/blue-green-rolling.yml"
+        EXTRA_VARS="new_version=$APP_VERSION"
+        ;;
+esac
+
+# Build ansible-playbook command
+ANSIBLE_CMD="ansible-playbook -i $PROJECT_DIR/inventory/hosts.yml $PLAYBOOK -e \"$EXTRA_VARS\""
+
+if [[ "$DRY_RUN" == "true" ]]; then
+    ANSIBLE_CMD="$ANSIBLE_CMD --check --diff"
+    warning "DRY RUN MODE - No actual changes will be made"
+fi
+
+log "Executing: $ANSIBLE_CMD"
+
+# Execute deployment
+if eval $ANSIBLE_CMD; then
+    success "$DEPLOYMENT_TYPE deployment completed successfully!"
+    
+    # Post-deployment validation
+    log "Performing post-deployment validation..."
+    sleep 5
+    
+    # Check all servers
+    for server in web01 web02 web03 web04; do
+        if curl -s "http://$server" | grep -q "$APP_VERSION"; then
+            success "$server: Version $APP_VERSION deployed successfully"
+        else
+            error "$server: Version validation failed"
+        fi
+    done
+    
+else
+    error "$DEPLOYMENT_TYPE deployment failed!"
+    exit 1
+fi
+EOF
+
+chmod +x scripts/deploy.sh
+
+Troubleshooting Common Issues
+Issue 1: Health Check Failures
+
+Problem: Health checks fail during deployment
+
+Solution:
+
+# Debug health check issues
+ansible webservers -i inventory/hosts.yml -m uri -a "url=http://{{ inventory_hostname }} method=GET return_content=yes" -v
+
+# Check nginx status
+ansible webservers -i inventory/hosts.yml -m service -a "name=nginx state=started" --become
+
+Issue 2: Load Balancer Integration
+
+Problem: Load balancer disable/enable commands fail
+
+Solution:
+
+# Test load balancer connectivity
+ansible lb01 -i inventory/hosts.yml -m ping
+
+# Manual load balancer operations
+curl -X POST http://lb01/disable/web01
+curl -X POST http://lb01/enable/web01
+
+Issue 3: Rollback Issues
+
+Problem: Rollback fails due to missing backups
+
+Solution:
+
+# Check available backups
+ansible webservers -i inventory/hosts.yml -m find -a "paths=/var/www/html patterns='index.html.backup*'" --become
+
+# Manual rollback
+ansible webservers -i inventory/hosts.yml -m copy -a "src=/var/www/html/index.html.backup dest=/var/www/html/index.html remote_src=yes" --become
+
+Conclusion
+
+In this comprehensive lab, you have successfully learned and implemented advanced rolling update strategies using Ansible. Here's what you accomplished:
+Key Achievements
+
+    Rolling Updates Mastery: You created sophisticated playbooks that implement rolling updates with proper health checks, connection draining, and failure handling.
+
+    Canary Deployment Implementation: You learned how to deploy to a subset of servers first, validate the deployment, and then proceed with the full rollout.
+
+    Blue-Green Strategy: You implemented a blue-green deployment approach that minimizes risk by updating servers in alternating groups.
+
+    Advanced Error Handling: Your playbooks include comprehensive error handling, automatic rollback capabilities, and detailed logging.
+
+    Production-Ready Features: You implemented features essential for production environments including:
+        Health checks and validation
+        Load balancer integration
+        Backup and rollback mechanisms
+        Batch processing and serial execution
+        Comprehensive monitoring and reporting
+
+Why This Matters
+
+Rolling updates are crucial in modern DevOps practices because they:
+
+    Minimize Downtime: Keep your applications available during updates
+    Reduce Risk: Gradual deployment allows early detection of issues
+    Enable Quick Recovery: Automated rollback capabilities ensure rapid recovery
+    Improve Reliability: Systematic approach reduces human error
+    Support Continuous Delivery: Enable frequent, safe deployments
+
+Next Steps
+
+To further enhance your rolling update capabilities, consider:
+
+    Integration with CI/CD pipelines
+    Advanced monitoring and alerting
+    Database migration strategies
+    Container-based rolling updates
+    Multi-region deployment strategies
+
+You now have the skills and tools to implement enterprise-grade rolling updates that ensure high availability an

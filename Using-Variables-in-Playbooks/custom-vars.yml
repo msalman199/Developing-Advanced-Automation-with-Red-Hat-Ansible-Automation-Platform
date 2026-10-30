@@ -1,0 +1,19 @@
+---
+# Custom variables for testing
+app_name: "custom-application"
+app_version: "3.0.0"
+app_port: 5000
+app_environment: "staging"
+
+features:
+  - authentication
+  - logging
+  - monitoring
+  - caching
+
+database:
+  type: "postgresql"
+  host: "db.staging.local"
+  port: 5432
+  ssl: true
+

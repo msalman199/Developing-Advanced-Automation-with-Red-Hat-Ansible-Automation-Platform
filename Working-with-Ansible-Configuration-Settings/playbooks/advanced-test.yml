@@ -1,0 +1,66 @@
+---
+- name: Advanced Configuration Testing
+  hosts: webservers
+  gather_facts: yes
+  vars:
+    test_packages:
+      - curl
+      - wget
+      - htop
+  
+  tasks:
+    - name: Update package cache (CentOS/RHEL)
+      yum:
+        update_cache: yes
+      when: ansible_os_family == "RedHat"
+      
+    - name: Update package cache (Ubuntu/Debian)
+      apt:
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Install test packages
+      package:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ test_packages }}"
+      register: package_install
+
+    - name: Display package installation results
+      debug:
+        msg: "Package {{ item.item }} installation: {{ 'Success' if not item.failed else 'Failed' }}"
+      loop: "{{ package_install.results }}"
+
+    - name: Create test directory structure
+      file:
+        path: "/tmp/ansible-test/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - logs
+        - config
+        - data
+
+    - name: Generate test configuration file
+      copy:
+        content: |
+          # Ansible Configuration Test File
+          # Generated on {{ ansible_date_time.iso8601 }}
+          # Host: {{ inventory_hostname }}
+          # OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          
+          [settings]
+          hostname={{ inventory_hostname }}
+          ip_address={{ ansible_default_ipv4.address }}
+          cpu_cores={{ ansible_processor_cores }}
+          memory_mb={{ ansible_memtotal_mb }}
+        dest: /tmp/ansible-test/config/system-info.conf
+        mode: '0644'
+
+    - name: Test service status
+      service_facts:
+
+    - name: Display SSH service status
+      debug:
+        msg: "SSH service is {{ ansible_facts.services['sshd.service'].state }}"
+      when: "'sshd.service' in ansible_facts.services"

@@ -1,0 +1,7 @@
+=== PERFORMANCE COMPARISON RESULTS ===
+Sequential execution time: 61.21s
+Linear execution time:     61.30s
+Free execution time:       61.27s
+Linear improvement over sequential: -0.15%
+Free strategy improvement over sequential: -0.10%
+=== END RESULTS ===

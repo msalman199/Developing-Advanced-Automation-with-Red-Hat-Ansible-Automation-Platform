@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<!--
+    Template: index.html.j2
+    Purpose: Sandbox index page rendered by the webserver role
+    Host: {{ inventory_hostname }}
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ inventory_hostname }} - webserver role</title>
+</head>
+<body>
+    <h1>webserver role output</h1>
+    <p>Document root: {{ webserver_document_root }}</p>
+</body>
+</html>

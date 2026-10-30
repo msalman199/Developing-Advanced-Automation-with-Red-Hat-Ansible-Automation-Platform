@@ -1,0 +1,55 @@
+---
+- name: Test Execution Environment Functionality
+  hosts: localhost
+  gather_facts: yes
+  vars:
+    custom_message: "Running in Custom Execution Environment"
+
+  tasks:
+    - name: Display system information
+      debug:
+        msg: |
+          Hostname: {{ ansible_hostname }}
+          OS Family: {{ ansible_os_family }}
+          Python Version: {{ ansible_python_version }}
+          Custom Message: {{ custom_message }}
+
+    - name: Test Python requests module via uri module
+      uri:
+        url: "https://httpbin.org/get"
+        method: GET
+        return_content: yes
+      register: http_response
+      ignore_errors: yes
+
+    - name: Display HTTP response
+      debug:
+        msg: "HTTP request status: {{ http_response.status | default('unreachable - no internet in sandbox') }}"
+
+    - name: Create a temporary file
+      tempfile:
+        state: file
+        suffix: .txt
+      register: temp_file
+
+    - name: Write content to temporary file
+      copy:
+        content: |
+          This file was created inside the Execution Environment
+          Timestamp: {{ ansible_date_time.iso8601 }}
+          Test Variable: {{ test_variable }}
+        dest: "{{ temp_file.path }}"
+
+    - name: Read back file content
+      slurp:
+        src: "{{ temp_file.path }}"
+      register: file_content
+
+    - name: Show file content
+      debug:
+        msg: "{{ file_content.content | b64decode }}"
+
+    - name: Clean up temporary file
+      file:
+        path: "{{ temp_file.path }}"
+        state: absent

@@ -1,0 +1,67 @@
+---
+- name: Comprehensive Idempotency Test
+  hosts: all
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Record start time
+      set_fact:
+        start_time: "{{ ansible_date_time.epoch }}"
+        
+    - name: Test file operations idempotency
+      file:
+        path: /tmp/test-{{ item }}
+        state: touch
+        mode: '0644'
+      loop:
+        - file1
+        - file2
+        - file3
+      register: file_results
+      
+    - name: Test package installation idempotency
+      yum:
+        name:
+          - wget
+          - curl
+          - vim
+        state: present
+      register: package_results
+      
+    - name: Test service management idempotency
+      systemd:
+        name: sshd
+        state: started
+        enabled: yes
+      register: service_results
+      
+    - name: Test user management idempotency
+      user:
+        name: "testuser{{ item }}"
+        state: present
+        shell: /bin/bash
+      loop:
+        - 1
+        - 2
+        - 3
+      register: user_results
+      
+    - name: Record end time
+      set_fact:
+        end_time: "{{ ansible_date_time.epoch }}"
+        
+    - name: Calculate execution time
+      set_fact:
+        execution_time: "{{ (end_time | int) - (start_time | int) }}"
+        
+    - name: Generate idempotency report
+      debug:
+        msg:
+          - "=== IDEMPOTENCY TEST REPORT ==="
+          - "Execution time: {{ execution_time }} seconds"
+          - "Files changed: {{ file_results.results | selectattr('changed') | list | length }}/{{ file_results.results | length }}"
+          - "Packages changed: {{ 'Yes' if package_results.changed else 'No' }}"
+          - "Service changed: {{ 'Yes' if service_results.changed else 'No' }}"
+          - "Users changed: {{ user_results.results | selectattr('changed') | list | length }}/{{ user_results.results | length }}"
+          - "Overall status: {{ 'CHANGES MADE' if (file_results.changed or package_results.changed or service_results.changed or user_results.changed) else 'IDEMPOTENT' }}"

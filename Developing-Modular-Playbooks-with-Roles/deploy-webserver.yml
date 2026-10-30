@@ -1,0 +1,46 @@
+---
+- name: Deploy Web Server Using Role
+  hosts: localhost
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    webserver_port: 8080
+    webserver_custom_content: |
+      <html>
+      <head>
+        <title>Advanced Ansible Lab</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 40px; }
+          .header { color: #2c3e50; text-align: center; }
+          .content { background-color: #ecf0f1; padding: 20px; border-radius: 5px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>🚀 Advanced Ansible Automation</h1>
+        </div>
+        <div class="content">
+          <h2>Lab 2: Modular Playbooks with Roles</h2>
+          <p><strong>Server:</strong> {{ ansible_hostname }}</p>
+          <p><strong>IP Address:</strong> {{ ansible_default_ipv4.address }}</p>
+          <p><strong>Port:</strong> {{ webserver_port }}</p>
+          <p><strong>Deployed:</strong> {{ ansible_date_time.iso8601 }}</p>
+          <hr>
+          <p>This web server was configured using an Ansible role!</p>
+        </div>
+      </body>
+      </html>
+
+  roles:
+    - webserver
+
+  post_tasks:
+    - name: Display deployment information
+      debug:
+        msg:
+          - "Web server deployment completed successfully!"
+          - "Service: {{ webserver_service }}"
+          - "Port: {{ webserver_port }}"
+          - "Document Root: {{ webserver_document_root }}"
+          - "Access URL: http://{{ ansible_default_ipv4.address }}:{{ webserver_port }}"

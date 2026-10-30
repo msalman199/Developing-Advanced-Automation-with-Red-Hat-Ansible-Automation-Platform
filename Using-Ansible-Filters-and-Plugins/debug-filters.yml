@@ -1,0 +1,29 @@
+---
+- name: Debug Filters and Variables
+  hosts: localhost
+  gather_facts: no
+  vars:
+    test_var: "Hello World"
+    test_list: [1, 2, 3, 4, 5]
+    test_dict: {key1: value1, key2: value2}
+
+  tasks:
+    - name: Debug variable types and values
+      debug:
+        msg:
+          - "String: {{ test_var | upper }}"
+          - "String type: {{ test_var | type_debug }}"
+          - "List: {{ test_list }}"
+          - "List type: {{ test_list | type_debug }}"
+          - "List sum: {{ test_list | sum }}"
+          - "Dict: {{ test_dict }}"
+          - "Dict type: {{ test_dict | type_debug }}"
+          - "Dict keys: {{ test_dict.keys() | list }}"
+
+    - name: Debug with default filter for undefined variables
+      debug:
+        msg: "Undefined with default: {{ undefined_var | default('fallback_value') }}"
+
+    - name: Debug combining custom and built-in filters
+      debug:
+        msg: "Custom + built-in: {{ test_var | reverse_string | lower }}"

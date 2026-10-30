@@ -1,0 +1,23 @@
+---
+- name: Update system packages
+  package:
+    name: '*'
+    state: latest
+  become: yes
+  when: update_system | default(false)
+
+- name: Install common packages
+  package:
+    name:
+      - vim
+      - curl
+      - wget
+      - net-tools
+    state: present
+  become: yes
+
+- name: Configure timezone
+  timezone:
+    name: "{{ system_timezone | default('UTC') }}"
+  become: yes---
+# tasks file for common

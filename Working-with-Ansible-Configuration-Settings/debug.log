@@ -1,0 +1,145 @@
+2026-10-29 04:36:35,285 p=5694 u=centos n=ansible | ansible-playbook [core 2.14.18]
+  config file = /home/centos/ansible-config-lab/ansible-debug.cfg
+  configured module search path = ['/home/centos/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']
+  ansible python module location = /usr/lib/python3.9/site-packages/ansible
+  ansible collection location = /home/centos/.ansible/collections:/usr/share/ansible/collections
+  executable location = /usr/bin/ansible-playbook
+  python version = 3.9.25 (main, Nov 10 2025, 00:00:00) [GCC 11.5.0 20240719 (Red Hat 11.5.0-14)] (/usr/bin/python3)
+  jinja version = 3.1.2
+  libyaml = True
+2026-10-29 04:36:35,286 p=5694 u=centos n=ansible | Using /home/centos/ansible-config-lab/ansible-debug.cfg as config file
+2026-10-29 04:36:35,286 p=5694 u=centos n=ansible | [DEPRECATION WARNING]: [defaults]callback_whitelist option, normalizing names 
+to new standard, use callbacks_enabled instead. This feature will be removed 
+from ansible-core in version 2.15. Deprecation warnings can be disabled by 
+setting deprecation_warnings=False in ansible.cfg.
+2026-10-29 04:36:35,287 p=5694 u=centos n=ansible | setting up inventory plugins
+2026-10-29 04:36:35,297 p=5694 u=centos n=ansible | host_list declined parsing /home/centos/ansible-config-lab/inventory/hosts as it did not pass its verify_file() method
+2026-10-29 04:36:35,298 p=5694 u=centos n=ansible | script declined parsing /home/centos/ansible-config-lab/inventory/hosts as it did not pass its verify_file() method
+2026-10-29 04:36:35,298 p=5694 u=centos n=ansible | auto declined parsing /home/centos/ansible-config-lab/inventory/hosts as it did not pass its verify_file() method
+2026-10-29 04:36:35,301 p=5694 u=centos n=ansible | Parsed /home/centos/ansible-config-lab/inventory/hosts inventory source with ini plugin
+2026-10-29 04:36:35,437 p=5694 u=centos n=ansible | redirecting (type: callback) ansible.builtin.debug to ansible.posix.debug
+2026-10-29 04:36:35,437 p=5694 u=centos n=ansible | Loading collection ansible.posix from /usr/lib/python3.9/site-packages/ansible_collections/ansible/posix
+2026-10-29 04:36:35,439 p=5694 u=centos n=ansible | redirecting (type: callback) ansible.builtin.debug to ansible.posix.debug
+2026-10-29 04:36:35,443 p=5694 u=centos n=ansible | Loading callback plugin ansible.posix.debug of type stdout, v2.0 from /usr/lib/python3.9/site-packages/ansible_collections/ansible/posix/plugins/callback/debug.py
+2026-10-29 04:36:35,463 p=5694 u=centos n=ansible | redirecting (type: callback) ansible.builtin.timer to ansible.posix.timer
+2026-10-29 04:36:35,464 p=5694 u=centos n=ansible | redirecting (type: callback) ansible.builtin.profile_tasks to ansible.posix.profile_tasks
+2026-10-29 04:36:35,465 p=5694 u=centos n=ansible | redirecting (type: callback) ansible.builtin.debug to ansible.posix.debug
+2026-10-29 04:36:35,465 p=5694 u=centos n=ansible | Skipping callback 'default', as we already have a stdout callback.
+2026-10-29 04:36:35,466 p=5694 u=centos n=ansible | Skipping callback 'minimal', as we already have a stdout callback.
+2026-10-29 04:36:35,466 p=5694 u=centos n=ansible | Skipping callback 'oneline', as we already have a stdout callback.
+2026-10-29 04:36:35,466 p=5694 u=centos n=ansible | Loading callback plugin ansible.posix.timer of type aggregate, v2.0 from /usr/lib/python3.9/site-packages/ansible_collections/ansible/posix/plugins/callback/timer.py
+2026-10-29 04:36:35,466 p=5694 u=centos n=ansible | Loading callback plugin ansible.posix.profile_tasks of type aggregate, v2.0 from /usr/lib/python3.9/site-packages/ansible_collections/ansible/posix/plugins/callback/profile_tasks.py
+2026-10-29 04:36:35,466 p=5694 u=centos n=ansible | Skipping callback 'debug', as we already have a stdout callback.
+2026-10-29 04:36:35,466 p=5694 u=centos n=ansible | PLAYBOOK: test-config.yml ******************************************************
+2026-10-29 04:36:35,467 p=5694 u=centos n=ansible | 1 plays in playbooks/test-config.yml
+2026-10-29 04:36:35,469 p=5694 u=centos n=ansible | PLAY [Test Ansible Configuration Settings] *************************************
+2026-10-29 04:36:35,482 p=5694 u=centos n=ansible | TASK [Gathering Facts] *********************************************************
+2026-10-29 04:36:35,482 p=5694 u=centos n=ansible | Thursday 29 October 2026  04:36:35 +0000 (0:00:00.018)       0:00:00.018 ****** 
+2026-10-29 04:36:35,499 p=5694 u=centos n=ansible | <192.168.1.10> ESTABLISH SSH CONNECTION FOR USER: ansible
+2026-10-29 04:36:35,503 p=5694 u=centos n=ansible | <192.168.1.10> SSH: EXEC ssh -vvv -o ControlMaster=auto -o ControlPersist=60s -vvv -o StrictHostKeyChecking=no -o 'IdentityFile="/home/centos/.ssh/id_rsa"' -o KbdInteractiveAuthentication=no -o PreferredAuthentications=gssapi-with-mic,gssapi-keyex,hostbased,publickey -o PasswordAuthentication=no -o 'User="ansible"' -o ConnectTimeout=10 -o 'ControlPath="/home/centos/.ansible/cp/bcfed02501"' 192.168.1.10 '/bin/sh -c '"'"'echo ~ansible && sleep 0'"'"''
+2026-10-29 04:36:45,528 p=5694 u=centos n=ansible | <192.168.1.10> (255, b'', b'OpenSSH_9.9p1, OpenSSL 3.5.5 27 Jan 2026\r\ndebug1: Reading configuration data /etc/ssh/ssh_config\r\ndebug3: /etc/ssh/ssh_config line 55: Including file /etc/ssh/ssh_config.d/50-redhat.conf depth 0\r\ndebug1: Reading configuration data /etc/ssh/ssh_config.d/50-redhat.conf\r\ndebug2: checking match for \'final all\' host 192.168.1.10 originally 192.168.1.10\r\ndebug3: /etc/ssh/ssh_config.d/50-redhat.conf line 3: not matched \'final\'\r\ndebug2: match not found\r\ndebug3: /etc/ssh/ssh_config.d/50-redhat.conf line 5: Including file /etc/crypto-policies/back-ends/openssh.config depth 1 (parse only)\r\ndebug1: Reading configuration data /etc/crypto-policies/back-ends/openssh.config\r\ndebug3: gss kex names ok: [gss-curve25519-sha256-,gss-nistp256-sha256-,gss-group14-sha256-,gss-group16-sha512-]\r\ndebug3: kex names ok: [curve25519-sha256,curve25519-sha256@libssh.org,ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,diffie-hellman-group-exchange-sha256,diffie-hellman-group14-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512]\r\ndebug1: configuration requests final Match pass\r\ndebug2: resolve_canonicalize: hostname 192.168.1.10 is address\r\ndebug1: re-parsing configuration\r\ndebug1: Reading configuration data /etc/ssh/ssh_config\r\ndebug3: /etc/ssh/ssh_config line 55: Including file /etc/ssh/ssh_config.d/50-redhat.conf depth 0\r\ndebug1: Reading configuration data /etc/ssh/ssh_config.d/50-redhat.conf\r\ndebug2: checking match for \'final all\' host 192.168.1.10 originally 192.168.1.10\r\ndebug3: /etc/ssh/ssh_config.d/50-redhat.conf line 3: matched \'final\'\r\ndebug2: match found\r\ndebug3: /etc/ssh/ssh_config.d/50-redhat.conf line 5: Including file /etc/crypto-policies/back-ends/openssh.config depth 1\r\ndebug1: Reading configuration data /etc/crypto-policies/back-ends/openssh.config\r\ndebug3: gss kex names ok: [gss-curve25519-sha256-,gss-nistp256-sha256-,gss-group14-sha256-,gss-group16-sha512-]\r\ndebug3: kex names ok: [curve25519-sha256,curve25519-sha256@libssh.org,ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,diffie-hellman-group-exchange-sha256,diffie-hellman-group14-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512]\r\ndebug3: expanded UserKnownHostsFile \'~/.ssh/known_hosts\' -> \'/home/centos/.ssh/known_hosts\'\r\ndebug3: expanded UserKnownHostsFile \'~/.ssh/known_hosts2\' -> \'/home/centos/.ssh/known_hosts2\'\r\ndebug1: auto-mux: Trying existing master at \'/home/centos/.ansible/cp/bcfed02501\'\r\ndebug1: Control socket "/home/centos/.ansible/cp/bcfed02501" does not exist\r\ndebug3: channel_clear_timeouts: clearing\r\ndebug3: ssh_connect_direct: entering\r\ndebug1: Connecting to 192.168.1.10 [192.168.1.10] port 22.\r\ndebug3: set_sock_tos: set socket 3 IP_TOS 0x48\r\ndebug2: fd 3 setting O_NONBLOCK\r\ndebug1: connect to address 192.168.1.10 port 22: Connection timed out\r\nssh: connect to host 192.168.1.10 port 22: Connection timed out\r\n')
+2026-10-29 04:36:45,528 p=5694 u=centos n=ansible | <192.168.1.10> ssh_retry: attempt: 1, ssh return code is 255. cmd ([b'ssh', b'-vvv', b'-o', b'ControlMaster=auto', b'-o', b'ControlPersist=60s', b'-vvv', b'-o', b'StrictHostKeyChecking=no', b'-o', b'IdentityFile="/home/centos/.ssh/id_rsa"', b'-o', b'KbdInteractiveAuthentication=no', b'-o', b'PreferredAuthentications=gssapi-with-mic,gssapi-keyex,hostbased,publickey', b'-o', b'PasswordAuthentication=no', b'-o', b'User="ansible"', b'-o', b'ConnectTimeout=10', b'-o', b'ControlPath="/home/centos/.ansible/cp/bcfed02501"', b'192.168.1.10', b"/bin/sh -c 'echo ~ansible && sleep 0'"]...), pausing for 0 seconds
+2026-10-29 04:36:45,529 p=5694 u=centos n=ansible | <192.168.1.10> SSH: EXEC ssh -vvv -o ControlMaster=auto -o ControlPersist=60s -vvv -o StrictHostKeyChecking=no -o 'IdentityFile="/home/centos/.ssh/id_rsa"' -o KbdInteractiveAuthentication=no -o PreferredAuthentications=gssapi-with-mic,gssapi-keyex,hostbased,publickey -o PasswordAuthentication=no -o 'User="ansible"' -o ConnectTimeout=10 -o 'ControlPath="/home/centos/.ansible/cp/bcfed02501"' 192.168.1.10 '/bin/sh -c '"'"'echo ~ansible && sleep 0'"'"''
+2026-10-29 04:36:55,541 p=5694 u=centos n=ansible | <192.168.1.10> (255, b'', b'OpenSSH_9.9p1, OpenSSL 3.5.5 27 Jan 2026\r\ndebug1: Reading configuration data /etc/ssh/ssh_config\r\ndebug3: /etc/ssh/ssh_config line 55: Including file /etc/ssh/ssh_config.d/50-redhat.conf depth 0\r\ndebug1: Reading configuration data /etc/ssh/ssh_config.d/50-redhat.conf\r\ndebug2: checking match for \'final all\' host 192.168.1.10 originally 192.168.1.10\r\ndebug3: /etc/ssh/ssh_config.d/50-redhat.conf line 3: not matched \'final\'\r\ndebug2: match not found\r\ndebug3: /etc/ssh/ssh_config.d/50-redhat.conf line 5: Including file /etc/crypto-policies/back-ends/openssh.config depth 1 (parse only)\r\ndebug1: Reading configuration data /etc/crypto-policies/back-ends/openssh.config\r\ndebug3: gss kex names ok: [gss-curve25519-sha256-,gss-nistp256-sha256-,gss-group14-sha256-,gss-group16-sha512-]\r\ndebug3: kex names ok: [curve25519-sha256,curve25519-sha256@libssh.org,ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,diffie-hellman-group-exchange-sha256,diffie-hellman-group14-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512]\r\ndebug1: configuration requests final Match pass\r\ndebug2: resolve_canonicalize: hostname 192.168.1.10 is address\r\ndebug1: re-parsing configuration\r\ndebug1: Reading configuration data /etc/ssh/ssh_config\r\ndebug3: /etc/ssh/ssh_config line 55: Including file /etc/ssh/ssh_config.d/50-redhat.conf depth 0\r\ndebug1: Reading configuration data /etc/ssh/ssh_config.d/50-redhat.conf\r\ndebug2: checking match for \'final all\' host 192.168.1.10 originally 192.168.1.10\r\ndebug3: /etc/ssh/ssh_config.d/50-redhat.conf line 3: matched \'final\'\r\ndebug2: match found\r\ndebug3: /etc/ssh/ssh_config.d/50-redhat.conf line 5: Including file /etc/crypto-policies/back-ends/openssh.config depth 1\r\ndebug1: Reading configuration data /etc/crypto-policies/back-ends/openssh.config\r\ndebug3: gss kex names ok: [gss-curve25519-sha256-,gss-nistp256-sha256-,gss-group14-sha256-,gss-group16-sha512-]\r\ndebug3: kex names ok: [curve25519-sha256,curve25519-sha256@libssh.org,ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,diffie-hellman-group-exchange-sha256,diffie-hellman-group14-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512]\r\ndebug3: expanded UserKnownHostsFile \'~/.ssh/known_hosts\' -> \'/home/centos/.ssh/known_hosts\'\r\ndebug3: expanded UserKnownHostsFile \'~/.ssh/known_hosts2\' -> \'/home/centos/.ssh/known_hosts2\'\r\ndebug1: auto-mux: Trying existing master at \'/home/centos/.ansible/cp/bcfed02501\'\r\ndebug1: Control socket "/home/centos/.ansible/cp/bcfed02501" does not exist\r\ndebug3: channel_clear_timeouts: clearing\r\ndebug3: ssh_connect_direct: entering\r\ndebug1: Connecting to 192.168.1.10 [192.168.1.10] port 22.\r\ndebug3: set_sock_tos: set socket 3 IP_TOS 0x48\r\ndebug2: fd 3 setting O_NONBLOCK\r\ndebug1: connect to address 192.168.1.10 port 22: Connection timed out\r\nssh: connect to host 192.168.1.10 port 22: Connection timed out\r\n')
+2026-10-29 04:36:55,543 p=5694 u=centos n=ansible | fatal: [web1]: UNREACHABLE! => {
+    "changed": false,
+    "unreachable": true
+}
+
+MSG:
+
+Failed to connect to the host via ssh: OpenSSH_9.9p1, OpenSSL 3.5.5 27 Jan 2026
+debug1: Reading configuration data /etc/ssh/ssh_config
+debug3: /etc/ssh/ssh_config line 55: Including file /etc/ssh/ssh_config.d/50-redhat.conf depth 0
+debug1: Reading configuration data /etc/ssh/ssh_config.d/50-redhat.conf
+debug2: checking match for 'final all' host 192.168.1.10 originally 192.168.1.10
+debug3: /etc/ssh/ssh_config.d/50-redhat.conf line 3: not matched 'final'
+debug2: match not found
+debug3: /etc/ssh/ssh_config.d/50-redhat.conf line 5: Including file /etc/crypto-policies/back-ends/openssh.config depth 1 (parse only)
+debug1: Reading configuration data /etc/crypto-policies/back-ends/openssh.config
+debug3: gss kex names ok: [gss-curve25519-sha256-,gss-nistp256-sha256-,gss-group14-sha256-,gss-group16-sha512-]
+debug3: kex names ok: [curve25519-sha256,curve25519-sha256@libssh.org,ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,diffie-hellman-group-exchange-sha256,diffie-hellman-group14-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512]
+debug1: configuration requests final Match pass
+debug2: resolve_canonicalize: hostname 192.168.1.10 is address
+debug1: re-parsing configuration
+debug1: Reading configuration data /etc/ssh/ssh_config
+debug3: /etc/ssh/ssh_config line 55: Including file /etc/ssh/ssh_config.d/50-redhat.conf depth 0
+debug1: Reading configuration data /etc/ssh/ssh_config.d/50-redhat.conf
+debug2: checking match for 'final all' host 192.168.1.10 originally 192.168.1.10
+debug3: /etc/ssh/ssh_config.d/50-redhat.conf line 3: matched 'final'
+debug2: match found
+debug3: /etc/ssh/ssh_config.d/50-redhat.conf line 5: Including file /etc/crypto-policies/back-ends/openssh.config depth 1
+debug1: Reading configuration data /etc/crypto-policies/back-ends/openssh.config
+debug3: gss kex names ok: [gss-curve25519-sha256-,gss-nistp256-sha256-,gss-group14-sha256-,gss-group16-sha512-]
+debug3: kex names ok: [curve25519-sha256,curve25519-sha256@libssh.org,ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,diffie-hellman-group-exchange-sha256,diffie-hellman-group14-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512]
+debug3: expanded UserKnownHostsFile '~/.ssh/known_hosts' -> '/home/centos/.ssh/known_hosts'
+debug3: expanded UserKnownHostsFile '~/.ssh/known_hosts2' -> '/home/centos/.ssh/known_hosts2'
+debug1: auto-mux: Trying existing master at '/home/centos/.ansible/cp/bcfed02501'
+debug1: Control socket "/home/centos/.ansible/cp/bcfed02501" does not exist
+debug3: channel_clear_timeouts: clearing
+debug3: ssh_connect_direct: entering
+debug1: Connecting to 192.168.1.10 [192.168.1.10] port 22.
+debug3: set_sock_tos: set socket 3 IP_TOS 0x48
+debug2: fd 3 setting O_NONBLOCK
+debug1: connect to address 192.168.1.10 port 22: Connection timed out
+ssh: connect to host 192.168.1.10 port 22: Connection timed out
+
+2026-10-29 04:36:55,545 p=5694 u=centos n=ansible | 	to retry, use: --limit @/home/centos/ansible-config-lab/debug_retries/test-config.retry
+
+2026-10-29 04:36:55,545 p=5694 u=centos n=ansible | PLAY RECAP *********************************************************************
+2026-10-29 04:36:55,545 p=5694 u=centos n=ansible | web1                       : ok=0    changed=0    unreachable=1    failed=0    skipped=0    rescued=0    ignored=0   
+2026-10-29 04:36:55,545 p=5694 u=centos n=ansible | Playbook run took 0 days, 0 hours, 0 minutes, 20 seconds
+2026-10-29 04:36:55,546 p=5694 u=centos n=ansible | Thursday 29 October 2026  04:36:55 +0000 (0:00:20.063)       0:00:20.081 ****** 
+2026-10-29 04:36:55,546 p=5694 u=centos n=ansible | =============================================================================== 
+2026-10-29 04:36:55,546 p=5694 u=centos n=ansible | Gathering Facts -------------------------------------------------------- 20.06s
+/home/centos/ansible-config-lab/playbooks/test-config.yml:2 -------------------
+2026-10-29 04:38:49,204 p=6852 u=centos n=ansible | ansible-config [core 2.14.18]
+  config file = /home/centos/ansible-config-lab/ansible-debug.cfg
+  configured module search path = ['/home/centos/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']
+  ansible python module location = /usr/lib/python3.9/site-packages/ansible
+  ansible collection location = /home/centos/.ansible/collections:/usr/share/ansible/collections
+  executable location = /usr/bin/ansible-config
+  python version = 3.9.25 (main, Nov 10 2025, 00:00:00) [GCC 11.5.0 20240719 (Red Hat 11.5.0-14)] (/usr/bin/python3)
+  jinja version = 3.1.2
+  libyaml = True
+2026-10-29 04:38:49,204 p=6852 u=centos n=ansible | Using /home/centos/ansible-config-lab/ansible-debug.cfg as config file
+2026-10-29 04:38:49,204 p=6852 u=centos n=ansible | [DEPRECATION WARNING]: [defaults]callback_whitelist option, normalizing names 
+to new standard, use callbacks_enabled instead. This feature will be removed 
+from ansible-core in version 2.15. Deprecation warnings can be disabled by 
+setting deprecation_warnings=False in ansible.cfg.
+2026-10-29 04:41:03,181 p=6960 u=centos n=ansible | ansible [core 2.14.18]
+  config file = /home/centos/ansible-config-lab/ansible-debug.cfg
+  configured module search path = ['/home/centos/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']
+  ansible python module location = /usr/lib/python3.9/site-packages/ansible
+  ansible collection location = /home/centos/.ansible/collections:/usr/share/ansible/collections
+  executable location = /usr/bin/ansible
+  python version = 3.9.25 (main, Nov 10 2025, 00:00:00) [GCC 11.5.0 20240719 (Red Hat 11.5.0-14)] (/usr/bin/python3)
+  jinja version = 3.1.2
+  libyaml = True
+2026-10-29 04:41:03,182 p=6960 u=centos n=ansible | Using /home/centos/ansible-config-lab/ansible-debug.cfg as config file
+2026-10-29 04:41:03,182 p=6960 u=centos n=ansible | [DEPRECATION WARNING]: [defaults]callback_whitelist option, normalizing names 
+to new standard, use callbacks_enabled instead. This feature will be removed 
+from ansible-core in version 2.15. Deprecation warnings can be disabled by 
+setting deprecation_warnings=False in ansible.cfg.
+2026-10-29 04:41:03,183 p=6960 u=centos n=ansible | setting up inventory plugins
+2026-10-29 04:41:03,191 p=6960 u=centos n=ansible | host_list declined parsing /home/centos/ansible-config-lab/inventory/hosts as it did not pass its verify_file() method
+2026-10-29 04:41:03,191 p=6960 u=centos n=ansible | script declined parsing /home/centos/ansible-config-lab/inventory/hosts as it did not pass its verify_file() method
+2026-10-29 04:41:03,191 p=6960 u=centos n=ansible | auto declined parsing /home/centos/ansible-config-lab/inventory/hosts as it did not pass its verify_file() method
+2026-10-29 04:41:03,195 p=6960 u=centos n=ansible | Parsed /home/centos/ansible-config-lab/inventory/hosts inventory source with ini plugin
+2026-10-29 04:41:03,209 p=6960 u=centos n=ansible | Loading callback plugin minimal of type stdout, v2.0 from /usr/lib/python3.9/site-packages/ansible/plugins/callback/minimal.py
+2026-10-29 04:41:03,229 p=6960 u=centos n=ansible | redirecting (type: callback) ansible.builtin.timer to ansible.posix.timer
+2026-10-29 04:41:03,229 p=6960 u=centos n=ansible | Loading collection ansible.posix from /usr/lib/python3.9/site-packages/ansible_collections/ansible/posix
+2026-10-29 04:41:03,231 p=6960 u=centos n=ansible | redirecting (type: callback) ansible.builtin.profile_tasks to ansible.posix.profile_tasks
+2026-10-29 04:41:03,232 p=6960 u=centos n=ansible | redirecting (type: callback) ansible.builtin.debug to ansible.posix.debug
+2026-10-29 04:41:03,234 p=6960 u=centos n=ansible | Skipping callback 'default', as we already have a stdout callback.
+2026-10-29 04:41:03,234 p=6960 u=centos n=ansible | Skipping callback 'minimal', as we already have a stdout callback.
+2026-10-29 04:41:03,235 p=6960 u=centos n=ansible | Skipping callback 'oneline', as we already have a stdout callback.
+2026-10-29 04:41:03,235 p=6960 u=centos n=ansible | Skipping callback 'debug', as we already have a stdout callback.
+2026-10-29 04:41:03,369 p=6960 u=centos n=ansible | <192.168.1.10> ESTABLISH SSH CONNECTION FOR USER: ansible
+2026-10-29 04:41:03,374 p=6960 u=centos n=ansible | <192.168.1.10> SSH: EXEC ssh -vvv -o ControlMaster=auto -o ControlPersist=60s -vvv -o StrictHostKeyChecking=no -o 'IdentityFile="/home/centos/.ssh/id_rsa"' -o KbdInteractiveAuthentication=no -o PreferredAuthentications=gssapi-with-mic,gssapi-keyex,hostbased,publickey -o PasswordAuthentication=no -o 'User="ansible"' -o ConnectTimeout=10 -o 'ControlPath="/home/centos/.ansible/cp/bcfed02501"' 192.168.1.10 '/bin/sh -c '"'"'echo ~ansible && sleep 0'"'"''
+2026-10-29 04:41:03,384 p=6960 u=centos n=ansible | <192.168.1.11> ESTABLISH SSH CONNECTION FOR USER: ansible
+2026-10-29 04:41:03,389 p=6960 u=centos n=ansible | <192.168.1.11> SSH: EXEC ssh -vvv -o ControlMaster=auto -o ControlPersist=60s -vvv -o StrictHostKeyChecking=no -o 'IdentityFile="/home/centos/.ssh/id_rsa"' -o KbdInteractiveAuthentication=no -o PreferredAuthentications=gssapi-with-mic,gssapi-keyex,hostbased,publickey -o PasswordAuthentication=no -o 'User="ansible"' -o ConnectTimeout=10 -o 'ControlPath="/home/centos/.ansible/cp/84ef2c5088"' 192.168.1.11 '/bin/sh -c '"'"'echo ~ansible && sleep 0'"'"''
+2026-10-29 04:41:03,396 p=6960 u=centos n=ansible | <192.168.1.20> ESTABLISH SSH CONNECTION FOR USER: ansible
+2026-10-29 04:41:03,401 p=6960 u=centos n=ansible | <192.168.1.20> SSH: EXEC ssh -vvv -o ControlMaster=auto -o ControlPersist=60s -vvv -o StrictHostKeyChecking=no -o 'IdentityFile="/home/centos/.ssh/id_rsa"' -o KbdInteractiveAuthentication=no -o PreferredAuthentications=gssapi-with-mic,gssapi-keyex,hostbased,publickey -o PasswordAuthentication=no -o 'User="ansible"' -o ConnectTimeout=10 -o 'ControlPath="/home/centos/.ansible/cp/28cfbf7177"' 192.168.1.20 '/bin/sh -c '"'"'echo ~ansible && sleep 0'"'"''
+2026-10-29 04:41:06,090 p=6960 u=centos n=ansible |  [ERROR]: User interrupted execution
+

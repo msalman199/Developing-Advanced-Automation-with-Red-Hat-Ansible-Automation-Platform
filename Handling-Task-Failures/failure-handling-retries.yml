@@ -1,0 +1,45 @@
+---
+- name: Handling Task Failures with Retries
+  hosts: webservers
+  become: yes
+  vars:
+    max_retries: 3
+    retry_delay: 2
+    
+  tasks:
+    - name: Task 1 - Network operation with retries
+      uri:
+        url: "http://httpbin.org/delay/1"
+        timeout: 5
+      register: network_result
+      retries: "{{ max_retries }}"
+      delay: "{{ retry_delay }}"
+      until: network_result.status == 200
+      
+    - name: Task 2 - Package installation with retries
+      package:
+        name: httpd
+        state: present
+      register: package_result
+      retries: "{{ max_retries }}"
+      delay: "{{ retry_delay }}"
+      until: package_result is succeeded
+      
+    - name: Task 3 - Service start with retries
+      service:
+        name: httpd
+        state: started
+        enabled: yes
+      register: service_result
+      retries: "{{ max_retries }}"
+      delay: "{{ retry_delay }}"
+      until: service_result is succeeded
+      
+    - name: Task 4 - Verify service is running
+      uri:
+        url: "http://{{ inventory_hostname }}"
+        timeout: 10
+      register: service_check
+      retries: 5
+      delay: 3
+      until: service_check.status == 200

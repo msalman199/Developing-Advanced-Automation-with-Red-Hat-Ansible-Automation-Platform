@@ -1,0 +1,21 @@
+---
+- name: Test Custom Callback Plugin
+  hosts: webservers
+  gather_facts: no
+
+  tasks:
+    - name: Quick task
+      debug:
+        msg: "This is a quick task"
+
+    - name: Task with variable
+      debug:
+        msg: "Server name: {{ inventory_hostname }}"
+
+    - name: Mathematical operation
+      debug:
+        msg: "Result: {{ 10 * 5 + 25 }}"
+
+    - name: Final task
+      debug:
+        msg: "All tasks completed successfully!"

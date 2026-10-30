@@ -1,0 +1,737 @@
+Lab 9: Working with Ansible Configuration Settings
+Objectives
+
+By the end of this lab, you will be able to:
+
+    Understand the hierarchy and structure of Ansible configuration files
+    Modify the ansible.cfg file to adjust verbosity levels for enhanced troubleshooting
+    Configure retry settings to improve playbook reliability
+    Monitor and analyze playbook execution output with different verbosity levels
+    Implement best practices for Ansible configuration management
+    Troubleshoot common configuration issues
+
+Prerequisites
+
+Before starting this lab, you should have:
+
+    Basic understanding of Linux command line operations
+    Familiarity with text editors (nano, vim, or vi)
+    Knowledge of YAML syntax and structure
+    Previous experience with Ansible playbooks and inventory files
+    Understanding of SSH key-based authentication
+    Basic networking concepts (IP addresses, hostnames)
+
+Lab Environment
+
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment - no need to build your own VM or install software.
+
+Your lab environment includes:
+
+    Control Node: CentOS/RHEL 8 with Ansible pre-installed
+    Managed Nodes: Two target systems for testing configurations
+    Pre-configured SSH keys for seamless connectivity
+    Sample inventory and playbook files
+
+Task 1: Understanding Ansible Configuration Hierarchy
+Subtask 1.1: Explore Configuration File Locations
+
+Ansible searches for configuration files in the following order of precedence:
+
+    ANSIBLE_CONFIG environment variable
+    ansible.cfg in the current directory
+    ~/.ansible.cfg in the user's home directory
+    /etc/ansible/ansible.cfg system-wide configuration
+
+Let's explore the current configuration:
+
+# Check current Ansible configuration
+ansible --version
+
+# Display current configuration file location
+ansible-config view
+
+# Show all configuration settings and their sources
+ansible-config dump
+
+Subtask 1.2: Create a Project-Specific Configuration Directory
+
+# Create a new project directory
+mkdir ~/ansible-config-lab
+cd ~/ansible-config-lab
+
+# Create necessary subdirectories
+mkdir playbooks inventory group_vars host_vars
+
+# Verify current directory
+pwd
+
+Task 2: Modify the ansible.cfg Configuration File
+Subtask 2.1: Create a Custom ansible.cfg File
+
+Create a project-specific configuration file with enhanced settings:
+
+# Create the ansible.cfg file in the project directory
+cat > ansible.cfg << 'EOF'
+[defaults]
+# Inventory file location
+inventory = ./inventory/hosts
+
+# Default remote user
+remote_user = ansible
+
+# SSH key file location
+private_key_file = ~/.ssh/id_rsa
+
+# Disable host key checking for lab environment
+host_key_checking = False
+
+# Set default verbosity level (0=minimal, 1=verbose, 2=more verbose, 3=debug, 4=connection debug)
+verbosity = 1
+
+# Number of parallel processes
+forks = 5
+
+# Timeout for SSH connections (seconds)
+timeout = 30
+
+# Enable pipelining for better performance
+pipelining = True
+
+# Retry settings
+retry_files_enabled = True
+retry_files_save_path = ./retry_files
+
+# Logging configuration
+log_path = ./ansible.log
+
+# Callback plugins for enhanced output
+stdout_callback = yaml
+bin_ansible_callbacks = True
+
+[ssh_connection]
+# SSH connection settings
+ssh_args = -o ControlMaster=auto -o ControlPersist=60s -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes
+
+# Connection timeout
+timeout = 30
+
+# Enable SSH pipelining
+pipelining = True
+
+[persistent_connection]
+# Persistent connection timeout
+command_timeout = 30
+connect_timeout = 30
+
+[inventory]
+# Enable inventory plugins
+enable_plugins = host_list, script, auto, yaml, ini, toml
+EOF
+
+Subtask 2.2: Create Inventory File
+
+# Create the inventory directory and hosts file
+cat > inventory/hosts << 'EOF'
+[webservers]
+web1 ansible_host=192.168.1.10
+web2 ansible_host=192.168.1.11
+
+[databases]
+db1 ansible_host=192.168.1.20
+
+[all:vars]
+ansible_user=ansible
+ansible_ssh_private_key_file=~/.ssh/id_rsa
+EOF
+
+Subtask 2.3: Verify Configuration Settings
+
+# Display current configuration
+ansible-config view
+
+# List all managed hosts
+ansible all --list-hosts
+
+# Test connectivity with current verbosity
+ansible all -m ping
+
+Task 3: Configure Advanced Verbosity and Retry Settings
+Subtask 3.1: Modify Verbosity Settings
+
+Update the configuration file to include different verbosity levels:
+
+# Backup the current configuration
+cp ansible.cfg ansible.cfg.backup
+
+# Update the configuration with enhanced verbosity settings
+cat > ansible.cfg << 'EOF'
+[defaults]
+inventory = ./inventory/hosts
+remote_user = ansible
+private_key_file = ~/.ssh/id_rsa
+host_key_checking = False
+
+# Enhanced verbosity for troubleshooting
+verbosity = 2
+
+# Retry configuration
+retry_files_enabled = True
+retry_files_save_path = ./retry_files
+retries = 3
+
+# Timeout settings
+timeout = 30
+command_warnings = True
+
+# Logging and output
+log_path = ./ansible.log
+display_skipped_hosts = True
+display_ok_hosts = True
+
+# Performance settings
+forks = 10
+pipelining = True
+gathering = smart
+fact_caching = memory
+
+# Callback plugins
+stdout_callback = yaml
+callback_whitelist = timer, profile_tasks
+
+[ssh_connection]
+ssh_args = -o ControlMaster=auto -o ControlPersist=60s -o UserKnownHostsFile=/dev/null
+timeout = 30
+pipelining = True
+retries = 3
+
+[persistent_connection]
+command_timeout = 30
+connect_timeout = 30
+retries = 3
+EOF
+
+Subtask 3.2: Create Retry Files Directory
+
+# Create directory for retry files
+mkdir -p retry_files
+
+# Set appropriate permissions
+chmod 755 retry_files
+
+Task 4: Create Test Playbooks for Configuration Testing
+Subtask 4.1: Create a Basic Test Playbook
+
+# Create a simple playbook to test configuration
+cat > playbooks/test-config.yml << 'EOF'
+---
+- name: Test Ansible Configuration Settings
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Display system information
+      debug:
+        msg: "System {{ inventory_hostname }} has {{ ansible_processor_cores }} CPU cores"
+
+    - name: Check disk space
+      command: df -h /
+      register: disk_space
+      changed_when: false
+
+    - name: Display disk space
+      debug:
+        var: disk_space.stdout_lines
+
+    - name: Create a test file
+      file:
+        path: /tmp/ansible-test-{{ ansible_date_time.epoch }}
+        state: touch
+        mode: '0644'
+
+    - name: Intentional task that might fail (for retry testing)
+      command: /bin/false
+      ignore_errors: yes
+      register: failure_test
+
+    - name: Display failure result
+      debug:
+        msg: "Task failed as expected: {{ failure_test.failed }}"
+EOF
+
+Subtask 4.2: Create a More Complex Playbook
+
+# Create a playbook with multiple tasks for comprehensive testing
+cat > playbooks/advanced-test.yml << 'EOF'
+---
+- name: Advanced Configuration Testing
+  hosts: webservers
+  gather_facts: yes
+  vars:
+    test_packages:
+      - curl
+      - wget
+      - htop
+  
+  tasks:
+    - name: Update package cache (CentOS/RHEL)
+      yum:
+        update_cache: yes
+      when: ansible_os_family == "RedHat"
+      
+    - name: Update package cache (Ubuntu/Debian)
+      apt:
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Install test packages
+      package:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ test_packages }}"
+      register: package_install
+
+    - name: Display package installation results
+      debug:
+        msg: "Package {{ item.item }} installation: {{ 'Success' if not item.failed else 'Failed' }}"
+      loop: "{{ package_install.results }}"
+
+    - name: Create test directory structure
+      file:
+        path: "/tmp/ansible-test/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - logs
+        - config
+        - data
+
+    - name: Generate test configuration file
+      copy:
+        content: |
+          # Ansible Configuration Test File
+          # Generated on {{ ansible_date_time.iso8601 }}
+          # Host: {{ inventory_hostname }}
+          # OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          
+          [settings]
+          hostname={{ inventory_hostname }}
+          ip_address={{ ansible_default_ipv4.address }}
+          cpu_cores={{ ansible_processor_cores }}
+          memory_mb={{ ansible_memtotal_mb }}
+        dest: /tmp/ansible-test/config/system-info.conf
+        mode: '0644'
+
+    - name: Test service status
+      service_facts:
+
+    - name: Display SSH service status
+      debug:
+        msg: "SSH service is {{ ansible_facts.services['sshd.service'].state }}"
+      when: "'sshd.service' in ansible_facts.services"
+EOF
+
+Task 5: Run Playbooks and Monitor Output
+Subtask 5.1: Test with Different Verbosity Levels
+
+# Run playbook with minimal verbosity (level 0)
+echo "=== Testing with verbosity level 0 ==="
+ansible-playbook playbooks/test-config.yml -v
+
+# Run playbook with increased verbosity (level 2)
+echo "=== Testing with verbosity level 2 ==="
+ansible-playbook playbooks/test-config.yml -vv
+
+# Run playbook with maximum verbosity (level 4)
+echo "=== Testing with verbosity level 4 ==="
+ansible-playbook playbooks/test-config.yml -vvvv
+
+Subtask 5.2: Monitor Configuration File Impact
+
+# Check current configuration impact
+ansible-config dump --only-changed
+
+# Run the advanced playbook
+ansible-playbook playbooks/advanced-test.yml
+
+# Check the log file
+tail -20 ansible.log
+
+Subtask 5.3: Test Retry Functionality
+
+Create a playbook that will demonstrate retry functionality:
+
+# Create a playbook with intentional failures
+cat > playbooks/retry-test.yml << 'EOF'
+---
+- name: Test Retry Functionality
+  hosts: webservers[0]
+  gather_facts: no
+  tasks:
+    - name: Task that will fail initially
+      shell: |
+        if [ ! -f /tmp/retry-success ]; then
+          echo "Creating success marker for next retry"
+          touch /tmp/retry-success
+          exit 1
+        else
+          echo "Success on retry!"
+          rm -f /tmp/retry-success
+          exit 0
+        fi
+      register: retry_result
+      retries: 3
+      delay: 2
+      until: retry_result.rc == 0
+
+    - name: Display retry results
+      debug:
+        msg: "Task succeeded after retries: {{ retry_result.stdout }}"
+EOF
+
+# Run the retry test
+ansible-playbook playbooks/retry-test.yml
+
+Task 6: Advanced Configuration Optimization
+Subtask 6.1: Performance Tuning Configuration
+
+# Create an optimized configuration for performance
+cat > ansible-performance.cfg << 'EOF'
+[defaults]
+inventory = ./inventory/hosts
+remote_user = ansible
+private_key_file = ~/.ssh/id_rsa
+host_key_checking = False
+
+# Performance optimizations
+forks = 20
+gathering = smart
+fact_caching = jsonfile
+fact_caching_connection = /tmp/ansible_facts_cache
+fact_caching_timeout = 3600
+
+# Reduced verbosity for performance
+verbosity = 0
+
+# Connection optimizations
+pipelining = True
+timeout = 10
+
+# Callback optimizations
+stdout_callback = oneline
+callback_whitelist = profile_tasks
+
+[ssh_connection]
+ssh_args = -o ControlMaster=auto -o ControlPersist=300s -o PreferredAuthentications=publickey
+pipelining = True
+timeout = 10
+retries = 2
+EOF
+
+# Test with performance configuration
+ANSIBLE_CONFIG=./ansible-performance.cfg ansible-playbook playbooks/advanced-test.yml
+
+Subtask 6.2: Debugging Configuration
+
+# Create a debugging-focused configuration
+cat > ansible-debug.cfg << 'EOF'
+[defaults]
+inventory = ./inventory/hosts
+remote_user = ansible
+private_key_file = ~/.ssh/id_rsa
+host_key_checking = False
+
+# Maximum debugging settings
+verbosity = 4
+log_path = ./debug.log
+
+# Display all information
+display_skipped_hosts = True
+display_ok_hosts = True
+display_failed_stderr = True
+
+# Retry settings for debugging
+retry_files_enabled = True
+retry_files_save_path = ./debug_retries
+
+# Detailed callbacks
+stdout_callback = debug
+callback_whitelist = timer, profile_tasks, debug
+
+[ssh_connection]
+ssh_args = -o ControlMaster=auto -o ControlPersist=60s -vvv
+timeout = 60
+retries = 1
+EOF
+
+# Test with debug configuration
+ANSIBLE_CONFIG=./ansible-debug.cfg ansible-playbook playbooks/test-config.yml --limit webservers[0]
+
+Task 7: Configuration Validation and Troubleshooting
+Subtask 7.1: Validate Configuration Settings
+
+# Validate current configuration
+ansible-config validate
+
+# Check for syntax errors in playbooks
+ansible-playbook --syntax-check playbooks/test-config.yml
+ansible-playbook --syntax-check playbooks/advanced-test.yml
+
+# List all configuration sources
+ansible-config dump --only-changed -v
+
+Subtask 7.2: Common Configuration Troubleshooting
+
+# Test connectivity with different configurations
+echo "=== Testing connectivity ==="
+ansible all -m ping
+
+# Check inventory parsing
+echo "=== Checking inventory ==="
+ansible-inventory --list
+
+# Verify SSH connectivity
+echo "=== Testing SSH connectivity ==="
+ansible all -m setup --tree /tmp/facts
+
+# Check for common issues
+echo "=== Configuration diagnostics ==="
+ansible-config view | grep -E "(timeout|retries|verbosity|forks)"
+
+Subtask 7.3: Create Configuration Comparison Script
+
+# Create a script to compare different configurations
+cat > compare-configs.sh << 'EOF'
+#!/bin/bash
+
+echo "=== Comparing Ansible Configurations ==="
+
+configs=("ansible.cfg" "ansible-performance.cfg" "ansible-debug.cfg")
+
+for config in "${configs[@]}"; do
+    if [ -f "$config" ]; then
+        echo "--- Configuration: $config ---"
+        ANSIBLE_CONFIG="./$config" ansible-config dump --only-changed | head -10
+        echo ""
+    fi
+done
+
+echo "=== Performance Test Results ==="
+for config in "${configs[@]}"; do
+    if [ -f "$config" ]; then
+        echo "Testing with $config:"
+        time ANSIBLE_CONFIG="./$config" ansible all -m ping > /dev/null 2>&1
+        echo ""
+    fi
+done
+EOF
+
+# Make script executable and run it
+chmod +x compare-configs.sh
+./compare-configs.sh
+
+Task 8: Best Practices Implementation
+Subtask 8.1: Create Production-Ready Configuration
+
+# Create a production-ready ansible.cfg
+cat > ansible-production.cfg << 'EOF'
+[defaults]
+# Inventory and authentication
+inventory = ./inventory/hosts
+remote_user = ansible
+private_key_file = ~/.ssh/id_rsa
+
+# Security settings
+host_key_checking = True
+ask_pass = False
+ask_sudo_pass = False
+
+# Performance settings
+forks = 10
+timeout = 30
+gathering = smart
+fact_caching = jsonfile
+fact_caching_connection = ~/.ansible/facts_cache
+fact_caching_timeout = 86400
+
+# Logging and output
+log_path = ./ansible-production.log
+verbosity = 1
+display_skipped_hosts = False
+display_ok_hosts = True
+
+# Retry settings
+retry_files_enabled = True
+retry_files_save_path = ./retry_files
+retries = 2
+
+# Callback plugins
+stdout_callback = yaml
+callback_whitelist = timer
+
+[ssh_connection]
+ssh_args = -o ControlMaster=auto -o ControlPersist=300s
+timeout = 30
+pipelining = True
+retries = 2
+
+[persistent_connection]
+command_timeout = 30
+connect_timeout = 30
+EOF
+
+Subtask 8.2: Environment-Specific Configurations
+
+# Create development environment configuration
+cat > ansible-dev.cfg << 'EOF'
+[defaults]
+inventory = ./inventory/dev-hosts
+remote_user = ansible
+private_key_file = ~/.ssh/id_rsa
+host_key_checking = False
+verbosity = 2
+log_path = ./ansible-dev.log
+retry_files_enabled = True
+gathering = explicit
+forks = 5
+
+[ssh_connection]
+timeout = 60
+retries = 3
+EOF
+
+# Create staging environment configuration
+cat > ansible-staging.cfg << 'EOF'
+[defaults]
+inventory = ./inventory/staging-hosts
+remote_user = ansible
+private_key_file = ~/.ssh/id_rsa
+host_key_checking = True
+verbosity = 1
+log_path = ./ansible-staging.log
+retry_files_enabled = True
+gathering = smart
+forks = 8
+
+[ssh_connection]
+timeout = 45
+retries = 2
+EOF
+
+Task 9: Monitoring and Analysis
+Subtask 9.1: Analyze Log Files
+
+# Analyze different log files
+echo "=== Log Analysis ==="
+
+# Check main log file
+if [ -f "ansible.log" ]; then
+    echo "Main log entries:"
+    tail -10 ansible.log
+    echo ""
+fi
+
+# Check debug log
+if [ -f "debug.log" ]; then
+    echo "Debug log entries:"
+    tail -5 debug.log
+    echo ""
+fi
+
+# Check for errors in logs
+echo "Error analysis:"
+grep -i "error\|failed\|fatal" *.log 2>/dev/null | head -5
+
+Subtask 9.2: Performance Metrics
+
+# Create a performance testing script
+cat > performance-test.sh << 'EOF'
+#!/bin/bash
+
+echo "=== Ansible Configuration Performance Test ==="
+
+configs=("ansible.cfg" "ansible-performance.cfg")
+playbook="playbooks/test-config.yml"
+
+for config in "${configs[@]}"; do
+    if [ -f "$config" ]; then
+        echo "Testing configuration: $config"
+        echo "Start time: $(date)"
+        
+        # Time the playbook execution
+        time_output=$(ANSIBLE_CONFIG="./$config" time ansible-playbook "$playbook" 2>&1)
+        
+        echo "Execution completed"
+        echo "Configuration: $config" >> performance-results.txt
+        echo "Time: $(date)" >> performance-results.txt
+        echo "$time_output" | grep "real\|user\|sys" >> performance-results.txt
+        echo "---" >> performance-results.txt
+        echo ""
+    fi
+done
+
+echo "Performance results saved to performance-results.txt"
+EOF
+
+# Run performance test
+chmod +x performance-test.sh
+./performance-test.sh
+
+Troubleshooting Common Issues
+Connection Issues
+
+# Test SSH connectivity manually
+ssh -i ~/.ssh/id_rsa ansible@192.168.1.10 "echo 'SSH test successful'"
+
+# Check SSH agent
+ssh-add -l
+
+# Verify inventory syntax
+ansible-inventory --list --yaml
+
+Configuration Issues
+
+# Check for configuration conflicts
+ansible-config dump | grep -E "(timeout|retries|verbosity)" | sort
+
+# Validate YAML syntax in playbooks
+python3 -c "import yaml; yaml.safe_load(open('playbooks/test-config.yml'))"
+
+# Test specific modules
+ansible all -m setup -a "filter=ansible_os_family"
+
+Performance Issues
+
+# Monitor system resources during playbook execution
+# Run this in a separate terminal:
+# watch -n 1 'ps aux | grep ansible; free -h'
+
+# Check for bottlenecks
+ansible-playbook playbooks/advanced-test.yml --diff --check
+
+Conclusion
+
+In this comprehensive lab, you have successfully:
+
+Configuration Management Skills Developed:
+
+    Created and customized ansible.cfg files for different environments and use cases
+    Implemented verbosity settings ranging from minimal output to detailed debugging information
+    Configured retry mechanisms to improve playbook reliability and handle transient failures
+    Optimized performance settings including forks, timeouts, and connection parameters
+
+Monitoring and Analysis Capabilities:
+
+    Monitored playbook execution with various verbosity levels to understand different output formats
+    Analyzed log files to troubleshoot issues and track playbook execution history
+    Implemented performance testing to compare different configuration approaches
+    Created environment-specific configurations for development, staging, and production use
+
+Best Practices Implementation:
+
+    Applied security-conscious settings appropriate for production environments
+    Implemented efficient connection management with SSH multiplexing and pipelining
+    Created reusable configuration templates for different scenarios
+    Established proper logging and retry strategies for enterprise environments
+
+Why This Matters: Understanding Ansible configuration management is crucial for enterprise automation because it directly impacts the reliability, performance, and maintainability of your infrastructure automation. Proper configuration ensures that playbooks execute efficiently, failures are handled gracefully, and troubleshooting information is readily available when issues arise. These skills are essential for the Red Hat Ansible Automation Platform certification and real-world automation scenarios where configuration optimization can mean the difference between successful deployments and operational challenges.
+
+The techniques learned in this lab will enable you to customize Ansible behavior for specific environments, optimize performance for large-scale deployments, and implement robust error handling and logging strategies that are essential for production automation workflows.

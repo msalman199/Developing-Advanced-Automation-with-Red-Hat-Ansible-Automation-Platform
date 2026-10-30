@@ -1,0 +1,21 @@
+---
+# =============================================================================
+# Web Server Role - Metadata
+# =============================================================================
+galaxy_info:
+  role_name: webserver
+  author: Infrastructure Automation Team (student exercise)
+  description: Sandbox role demonstrating documentation best practices for Ansible roles
+  license: MIT
+  min_ansible_version: 2.9
+  platforms:
+    - name: Ubuntu
+      versions:
+        - 20.04
+        - 22.04
+    - name: EL
+      versions:
+        - 8
+        - 9
+
+dependencies: []

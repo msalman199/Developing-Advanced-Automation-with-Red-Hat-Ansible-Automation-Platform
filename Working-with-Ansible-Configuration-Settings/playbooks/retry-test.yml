@@ -1,0 +1,24 @@
+---
+- name: Test Retry Functionality
+  hosts: webservers[0]
+  gather_facts: no
+  tasks:
+    - name: Task that will fail initially
+      shell: |
+        if [ ! -f /tmp/retry-success ]; then
+          echo "Creating success marker for next retry"
+          touch /tmp/retry-success
+          exit 1
+        else
+          echo "Success on retry!"
+          rm -f /tmp/retry-success
+          exit 0
+        fi
+      register: retry_result
+      retries: 3
+      delay: 2
+      until: retry_result.rc == 0
+
+    - name: Display retry results
+      debug:
+        msg: "Task succeeded after retries: {{ retry_result.stdout }}"

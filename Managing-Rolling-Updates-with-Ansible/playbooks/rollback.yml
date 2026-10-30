@@ -1,0 +1,57 @@
+---
+- name: Emergency Rollback Playbook
+  hosts: webservers
+  become: yes
+  serial: "{{ rollback_batch_size | default(2) }}"
+  vars:
+    rollback_version: "{{ target_version | default('1.0.0') }}"
+    
+  tasks:
+    - name: Find available backups
+      find:
+        paths: /var/www/html
+        patterns: "index.html.backup*"
+      register: backup_files
+      
+    - name: Display available backups
+      debug:
+        msg: "Available backups: {{ backup_files.files | map(attribute='path') | list }}"
+        
+    - name: Remove from load balancer
+      uri:
+        url: "http://{{ hostvars['lb01']['ansible_host'] }}/disable/{{ inventory_hostname }}"
+        method: POST
+      delegate_to: lb01
+      ignore_errors: yes
+      
+    - name: Perform rollback
+      copy:
+        src: "{{ backup_files.files | sort(attribute='mtime') | last | default('/var/www/html/index.html.backup') }}"
+        dest: /var/www/html/index.html
+        remote_src: yes
+      when: backup_files.files | length > 0
+      
+    - name: Restart nginx
+      service:
+        name: nginx
+        state: restarted
+        
+    - name: Verify rollback
+      uri:
+        url: "http://{{ inventory_hostname }}"
+        method: GET
+        status_code: 200
+      register: rollback_check
+      retries: 3
+      delay: 5
+      
+    - name: Add back to load balancer
+      uri:
+        url: "http://{{ hostvars['lb01']['ansible_host'] }}/enable/{{ inventory_hostname }}"
+        method: POST
+      delegate_to: lb01
+      ignore_errors: yes
+      
+    - name: Rollback confirmation
+      debug:
+        msg: "Successfully rolled back {{ inventory_hostname }}"

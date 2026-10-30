@@ -1,0 +1,58 @@
+---
+- name: Demonstrate List and Dictionary Filters
+  hosts: webservers
+  gather_facts: no
+  vars:
+    server_list:
+      - "web01"
+      - "web02"
+      - "db01"
+      - "web03"
+
+    server_ports: [80, 443, 8080, 3306, 5432]
+
+    server_config:
+      web01:
+        role: webserver
+        port: 80
+        status: active
+      web02:
+        role: webserver
+        port: 443
+        status: inactive
+      db01:
+        role: database
+        port: 3306
+        status: active
+
+    mixed_numbers: [1, 5, 3, 9, 2, 7]
+
+  tasks:
+    - name: Filter web servers from list
+      debug:
+        msg: "Web servers: {{ server_list | select('match', '^web.*') | list }}"
+
+    - name: Get unique values and sort
+      debug:
+        msg: "Sorted unique ports: {{ server_ports | unique | sort }}"
+
+    - name: Get min, max, and sum values
+      debug:
+        msg:
+          - "Min port: {{ server_ports | min }}"
+          - "Max port: {{ server_ports | max }}"
+          - "Sum of numbers: {{ mixed_numbers | sum }}"
+
+    - name: Work with dictionary keys and values
+      debug:
+        msg:
+          - "Server names: {{ server_config.keys() | list }}"
+          - "Active servers: {{ server_config | dict2items | selectattr('value.status', 'equalto', 'active') | map(attribute='key') | list }}"
+
+    - name: Group servers by role
+      debug:
+        msg: "Webservers: {{ server_config | dict2items | selectattr('value.role', 'equalto', 'webserver') | map(attribute='key') | list }}"
+
+    - name: Join list elements
+      debug:
+        msg: "Servers as string: {{ server_list | join(', ') }}"

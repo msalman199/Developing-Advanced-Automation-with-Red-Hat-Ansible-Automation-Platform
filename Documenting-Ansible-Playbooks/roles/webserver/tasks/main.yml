@@ -1,0 +1,32 @@
+---
+# =============================================================================
+# Web Server Role - Main Tasks
+# =============================================================================
+# Role: webserver
+# File: tasks/main.yml
+# Purpose: Entry point for the role. Creates a documented sandbox web root
+#          and reports the resulting configuration. Intentionally avoids
+#          package installation so the role is safe to run anywhere.
+# =============================================================================
+
+- name: "WEBSERVER | Ensure sandbox document root exists"
+  file:
+    path: "{{ webserver_document_root }}"
+    state: directory
+    mode: '0755'
+  tags: ['webserver', 'setup']
+
+- name: "WEBSERVER | Render sandbox index page"
+  template:
+    src: "index.html.j2"
+    dest: "{{ webserver_document_root }}/index.html"
+    mode: '0644'
+  tags: ['webserver', 'content']
+
+- name: "WEBSERVER | Report role configuration"
+  debug:
+    msg: |
+      Role 'webserver' applied to {{ inventory_hostname }}
+      Document root: {{ webserver_document_root }}
+      Service name (reference only): {{ webserver_service_name }}
+  tags: ['webserver', 'report']

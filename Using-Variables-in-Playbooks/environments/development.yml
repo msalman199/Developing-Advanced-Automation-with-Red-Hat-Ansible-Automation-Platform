@@ -1,0 +1,17 @@
+---
+# Development environment variables
+environment: "development"
+web_port: 8080
+debug_enabled: true
+log_level: "debug"
+max_connections: 50
+ssl_enabled: false
+
+database_config:
+  host: "dev-db.local"
+  port: 3306
+  name: "dev_database"
+  user: "dev_user"
+
+backup_retention: 7
+monitoring_enabled: false

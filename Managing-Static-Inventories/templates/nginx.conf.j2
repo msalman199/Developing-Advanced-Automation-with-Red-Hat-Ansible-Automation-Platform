@@ -1,0 +1,110 @@
+user www-data;
+worker_processes {{ nginx_worker_processes | default('auto') }};
+pid /run/nginx.pid;
+
+events {
+    worker_connections {{ nginx_worker_connections | default('768') }};
+    use epoll;
+    multi_accept on;
+}
+
+http {
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+    server_tokens off;
+
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    # Logging Settings
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log /var/log/nginx/access.log main;
+    error_log /var/log/nginx/error.log;
+
+    # Gzip Settings
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+    # Virtual Host Configs
+    include /etc/nginx/conf.d/*.conf;
+    include /etc/nginx/sites-enabled/*;
+}
+
+# Create virtual host template
+nano templates/vhost.conf.j2
+
+server {
+    listen {{ http_port }};
+    {% if item.ssl_enabled %}
+    listen {{ https_port }} ssl;
+    {% endif %}
+    
+    server_name {{ item.name }};
+    root {{ item.document_root }};
+    index index.html index.htm index.php;
+
+    {% if item.ssl_enabled %}
+    ssl_certificate {{ ssl_certificate_path }}/{{ item.name }}.crt;
+    ssl_certificate_key {{ ssl_private_key_path }}/{{ item.name }}.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    {% endif %}
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/var/run/php/php7.4-fpm.sock;
+    }
+
+    location ~ /\.ht {
+        deny all;
+    }
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header X-Content-Type-Options "nosniff" always;
+}
+
+# Create MySQL configuration template
+nano templates/my.cnf.j2
+
+[mysqld]
+bind-address = {{ mysql_config.bind_address }}
+port = {{ db_port }}
+max_connections = {{ mysql_config.max_connections }}
+
+# InnoDB settings
+innodb_buffer_pool_size = {{ mysql_config.innodb_buffer_pool_size }}
+innodb_log_file_size = 256M
+innodb_flush_log_at_trx_commit = 1
+innodb_flush_method = O_DIRECT
+
+# Query cache
+query_cache_type = 1
+query_cache_size = {{ mysql_config.query_cache_size }}
+
+# Logging
+log_error = /var/log/mysql/error.log
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow.log
+long_query_time = 2
+
+# Binary logging for replication
+{% if replication_enabled %}
+log_bin = /var/log/mysql/mysql-bin.log
+server_id = {{ ansible_default_ipv4.address.split('.')[-1] }}
+{% endif %}

@@ -1,0 +1,53 @@
+---
+# Web Server Group Variables
+web_packages:
+  - nginx
+  - php-fpm
+  - certbot
+
+ssl_certificate_path: /etc/ssl/certs
+ssl_private_key_path: /etc/ssl/private
+
+firewall_rules:
+  - port: 80
+    protocol: tcp
+    source: any
+  - port: 443
+    protocol: tcp
+    source: any
+  - port: 22
+    protocol: tcp
+    source: "192.168.1.0/24"
+
+log_rotation:
+  access_log_days: 30
+  error_log_days: 90
+
+# Create databases group variables
+nano group_vars/databases.yml
+
+---
+# Database Group Variables
+db_packages:
+  - mysql-server
+  - mysql-client
+  - python3-pymysql
+
+mysql_config:
+  bind_address: "0.0.0.0"
+  max_connections: 500
+  innodb_buffer_pool_size: "1G"
+  query_cache_size: "64M"
+
+backup_config:
+  backup_dir: /var/backups/mysql
+  retention_days: 7
+  compression: true
+
+firewall_rules:
+  - port: 3306
+    protocol: tcp
+    source: "192.168.1.0/24"
+  - port: 22
+    protocol: tcp
+    source: "192.168.1.0/24"

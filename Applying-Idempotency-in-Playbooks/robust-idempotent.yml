@@ -1,0 +1,63 @@
+---
+- name: Robust Idempotent Playbook
+  hosts: node1
+  become: yes
+  vars:
+    service_name: custom-app
+    config_path: /etc/custom-app
+    
+  tasks:
+    - name: Check if service exists
+      stat:
+        path: "/etc/systemd/system/{{ service_name }}.service"
+      register: service_file
+      
+    - name: Ensure configuration directory exists
+      file:
+        path: "{{ config_path }}"
+        state: directory
+        mode: '0755'
+      register: config_dir
+      
+    - name: Create service configuration only if directory was created
+      copy:
+        content: |
+          # Custom application configuration
+          APP_NAME={{ service_name }}
+          CONFIG_DIR={{ config_path }}
+          CREATED_BY=ansible
+        dest: "{{ config_path }}/app.conf"
+        mode: '0644'
+      when: config_dir.changed
+      register: app_config
+      
+    - name: Ensure log directory exists with proper permissions
+      file:
+        path: /var/log/custom-app
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      register: log_dir
+      
+    - name: Set up log rotation only if log directory was created
+      copy:
+        content: |
+          /var/log/custom-app/*.log {
+              daily
+              rotate 7
+              compress
+              delaycompress
+              missingok
+              notifempty
+          }
+        dest: /etc/logrotate.d/custom-app
+        mode: '0644'
+      when: log_dir.changed
+      
+    - name: Display conditional execution results
+      debug:
+        msg:
+          - "Config directory: {{ 'created' if config_dir.changed else 'already exists' }}"
+          - "App config: {{ 'created' if app_config.changed else 'skipped (directory existed)' }}"
+          - "Log directory: {{ 'created' if log_dir.changed else 'already exists' }}"

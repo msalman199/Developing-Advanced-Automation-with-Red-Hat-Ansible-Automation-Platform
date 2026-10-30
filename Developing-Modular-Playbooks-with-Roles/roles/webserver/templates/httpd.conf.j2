@@ -1,0 +1,64 @@
+# Basic Apache Configuration Template
+ServerRoot "/etc/httpd"
+Listen {{ webserver_port }}
+
+Include conf.modules.d/*.conf
+
+User {{ webserver_user }}
+Group {{ webserver_group }}
+
+ServerAdmin root@localhost
+ServerName localhost:{{ webserver_port }}
+
+<Directory />
+    AllowOverride none
+    Require all denied
+</Directory>
+
+DocumentRoot "{{ webserver_document_root }}"
+
+<Directory "{{ webserver_document_root }}">
+    Options Indexes FollowSymLinks
+    AllowOverride None
+    Require all granted
+</Directory>
+
+<IfModule dir_module>
+    DirectoryIndex {{ webserver_index_file }}
+</IfModule>
+
+<Files ".ht*">
+    Require all denied
+</Files>
+
+ErrorLog "logs/error_log"
+LogLevel warn
+
+<IfModule log_config_module>
+    LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" combined
+    LogFormat "%h %l %u %t \"%r\" %>s %b" common
+    CustomLog "logs/access_log" combined
+</IfModule>
+
+<IfModule mime_module>
+    TypesConfig /etc/mime.types
+    AddType application/x-compress .Z
+    AddType application/x-gzip .gz .tgz
+    AddType text/html .shtml
+    AddOutputFilter INCLUDES .shtml
+</IfModule>
+
+AddDefaultCharset UTF-8
+
+<IfModule mime_magic_module>
+    MIMEMagicFile conf/magic
+</IfModule>
+
+EnableSendfile on
+
+# Maximum number of connections
+MaxRequestWorkers {{ webserver_max_connections }}
+
+# Include additional configurations
+IncludeOptional conf.d/*.conf
+

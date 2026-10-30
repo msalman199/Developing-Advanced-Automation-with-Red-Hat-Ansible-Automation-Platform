@@ -1,0 +1,38 @@
+---
+- name: Parallel Task Execution with Forks
+  hosts: webservers
+  gather_facts: yes
+  strategy: linear
+
+  tasks:
+    - name: Install packages in parallel
+      yum:
+        name:
+          - htop
+          - tree
+          - wget
+          - curl
+        state: present
+      become: yes
+
+    - name: Create multiple directories in parallel
+      file:
+        path: "/tmp/parallel_dir_{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+
+    - name: Download test files in parallel
+      get_url:
+        url: "https://httpbin.org/delay/2"
+        dest: "/tmp/parallel_file_{{ inventory_hostname }}.json"
+        timeout: 30
+
+    - name: Simulate processing time
+      command: sleep 3
+      changed_when: false

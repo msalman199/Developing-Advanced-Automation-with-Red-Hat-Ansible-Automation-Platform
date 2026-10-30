@@ -1,0 +1,4 @@
+---
+test_var: "vars_files"
+priority_var: "from_vars_files"
+file_var: "only_in_file"

@@ -1,0 +1,734 @@
+Lab 2: Developing Modular Playbooks with Roles
+Objectives
+
+By the end of this lab, students will be able to:
+
+    Understand the concept and benefits of Ansible roles for code organization
+    Create a structured Ansible role for service configuration
+    Implement role-based playbooks for modular automation
+    Apply best practices for role development and directory structure
+    Test and validate role functionality within playbooks
+    Demonstrate advanced automation techniques using reusable components
+
+Prerequisites
+
+Before starting this lab, students should have:
+
+    Basic understanding of Ansible playbooks and YAML syntax
+    Familiarity with Linux command line operations
+    Knowledge of system services and configuration management
+    Experience with text editors (vim, nano, or similar)
+    Understanding of file permissions and directory structures
+    Completion of basic Ansible fundamentals training
+
+Lab Environment Setup
+
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment - no need to build your own VM or install software.
+
+Your lab environment includes:
+
+    CentOS/RHEL 8 or Ubuntu 20.04 LTS
+    Ansible 4.0+ pre-installed
+    Text editors (vim, nano)
+    Sample configuration files
+    Network connectivity for testing
+
+Task 1: Create a Role for Configuring a Service
+Subtask 1.1: Understanding Ansible Role Structure
+
+Before creating our role, let's understand the standard Ansible role directory structure:
+
+role_name/
+├── defaults/
+│   └── main.yml
+├── files/
+├── handlers/
+│   └── main.yml
+├── meta/
+│   └── main.yml
+├── tasks/
+│   └── main.yml
+├── templates/
+├── tests/
+│   ├── inventory
+│   └── test.yml
+└── vars/
+    └── main.yml
+
+Key Components:
+
+    tasks/: Contains the main list of tasks to be executed
+    handlers/: Contains handlers triggered by notify directives
+    defaults/: Default variables for the role (lowest precedence)
+    vars/: Other variables for the role (higher precedence)
+    files/: Contains files to be deployed
+    templates/: Contains Jinja2 templates
+    meta/: Contains role metadata and dependencies
+
+Subtask 1.2: Create the Role Directory Structure
+
+    Navigate to your home directory and create a roles directory:
+
+cd ~
+mkdir -p ansible-lab/roles
+cd ansible-lab/roles
+
+    Create a role called webserver using ansible-galaxy:
+
+ansible-galaxy init webserver
+
+    Verify the role structure was created:
+
+tree webserver/
+
+Expected output:
+
+webserver/
+├── README.md
+├── defaults
+│   └── main.yml
+├── files
+├── handlers
+│   └── main.yml
+├── meta
+│   └── main.yml
+├── tasks
+│   └── main.yml
+├── templates
+├── tests
+│   ├── inventory
+│   └── test.yml
+└── vars
+    └── main.yml
+
+Subtask 1.3: Define Role Variables
+
+    Edit the default variables file:
+
+vim webserver/defaults/main.yml
+
+    Add the following content:
+
+---
+# defaults file for webserver
+webserver_package: httpd
+webserver_service: httpd
+webserver_port: 80
+webserver_document_root: /var/www/html
+webserver_index_file: index.html
+webserver_user: apache
+webserver_group: apache
+
+# Configuration options
+webserver_enable_ssl: false
+webserver_ssl_port: 443
+webserver_max_connections: 100
+
+# Custom content
+webserver_custom_content: |
+  <html>
+  <head>
+    <title>Welcome to Our Web Server</title>
+  </head>
+  <body>
+    <h1>Hello from Ansible Role!</h1>
+    <p>This page was deployed using an Ansible role.</p>
+    <p>Server configured on port {{ webserver_port }}</p>
+  </body>
+  </html>
+
+Subtask 1.4: Create Role Tasks
+
+    Edit the main tasks file:
+
+vim webserver/tasks/main.yml
+
+    Add the following tasks:
+
+---
+# tasks file for webserver
+
+- name: Install web server package
+  package:
+    name: "{{ webserver_package }}"
+    state: present
+  become: yes
+  tags:
+    - install
+    - webserver
+
+- name: Create document root directory
+  file:
+    path: "{{ webserver_document_root }}"
+    state: directory
+    owner: "{{ webserver_user }}"
+    group: "{{ webserver_group }}"
+    mode: '0755'
+  become: yes
+  tags:
+    - configure
+    - webserver
+
+- name: Deploy custom index page
+  copy:
+    content: "{{ webserver_custom_content }}"
+    dest: "{{ webserver_document_root }}/{{ webserver_index_file }}"
+    owner: "{{ webserver_user }}"
+    group: "{{ webserver_group }}"
+    mode: '0644'
+  become: yes
+  notify: restart webserver
+  tags:
+    - configure
+    - content
+
+- name: Configure web server
+  template:
+    src: httpd.conf.j2
+    dest: /etc/httpd/conf/httpd.conf
+    owner: root
+    group: root
+    mode: '0644'
+    backup: yes
+  become: yes
+  notify: restart webserver
+  when: webserver_package == "httpd"
+  tags:
+    - configure
+    - webserver
+
+- name: Start and enable web server service
+  service:
+    name: "{{ webserver_service }}"
+    state: started
+    enabled: yes
+  become: yes
+  tags:
+    - service
+    - webserver
+
+- name: Open firewall port
+  firewalld:
+    port: "{{ webserver_port }}/tcp"
+    permanent: yes
+    state: enabled
+    immediate: yes
+  become: yes
+  ignore_errors: yes
+  tags:
+    - firewall
+    - webserver
+
+Subtask 1.5: Create Role Handlers
+
+    Edit the handlers file:
+
+vim webserver/handlers/main.yml
+
+    Add the following handlers:
+
+---
+# handlers file for webserver
+
+- name: restart webserver
+  service:
+    name: "{{ webserver_service }}"
+    state: restarted
+  become: yes
+
+- name: reload webserver
+  service:
+    name: "{{ webserver_service }}"
+    state: reloaded
+  become: yes
+
+- name: restart firewall
+  service:
+    name: firewalld
+    state: restarted
+  become: yes
+
+Subtask 1.6: Create Configuration Template
+
+    Create a template for the web server configuration:
+
+vim webserver/templates/httpd.conf.j2
+
+    Add a basic Apache configuration template:
+
+# Basic Apache Configuration Template
+ServerRoot "/etc/httpd"
+Listen {{ webserver_port }}
+
+Include conf.modules.d/*.conf
+
+User {{ webserver_user }}
+Group {{ webserver_group }}
+
+ServerAdmin root@localhost
+ServerName localhost:{{ webserver_port }}
+
+<Directory />
+    AllowOverride none
+    Require all denied
+</Directory>
+
+DocumentRoot "{{ webserver_document_root }}"
+
+<Directory "{{ webserver_document_root }}">
+    Options Indexes FollowSymLinks
+    AllowOverride None
+    Require all granted
+</Directory>
+
+<IfModule dir_module>
+    DirectoryIndex {{ webserver_index_file }}
+</IfModule>
+
+<Files ".ht*">
+    Require all denied
+</Files>
+
+ErrorLog "logs/error_log"
+LogLevel warn
+
+<IfModule log_config_module>
+    LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" combined
+    LogFormat "%h %l %u %t \"%r\" %>s %b" common
+    CustomLog "logs/access_log" combined
+</IfModule>
+
+<IfModule mime_module>
+    TypesConfig /etc/mime.types
+    AddType application/x-compress .Z
+    AddType application/x-gzip .gz .tgz
+    AddType text/html .shtml
+    AddOutputFilter INCLUDES .shtml
+</IfModule>
+
+AddDefaultCharset UTF-8
+
+<IfModule mime_magic_module>
+    MIMEMagicFile conf/magic
+</IfModule>
+
+EnableSendfile on
+
+# Maximum number of connections
+MaxRequestWorkers {{ webserver_max_connections }}
+
+# Include additional configurations
+IncludeOptional conf.d/*.conf
+
+Subtask 1.7: Add Role Metadata
+
+    Edit the meta file to define role information:
+
+vim webserver/meta/main.yml
+
+    Add the following metadata:
+
+---
+galaxy_info:
+  author: Ansible Student
+  description: A role for configuring Apache web server
+  company: Al Nafi Training
+  license: MIT
+  min_ansible_version: 2.9
+  platforms:
+    - name: EL
+      versions:
+        - 7
+        - 8
+    - name: Ubuntu
+      versions:
+        - 18.04
+        - 20.04
+  galaxy_tags:
+    - web
+    - apache
+    - httpd
+    - server
+
+dependencies: []
+
+Task 2: Use the Role Within a Playbook to Apply the Configuration
+Subtask 2.1: Create the Main Playbook
+
+    Navigate back to the ansible-lab directory:
+
+cd ~/ansible-lab
+
+    Create a playbook that uses our webserver role:
+
+vim deploy-webserver.yml
+
+    Add the following playbook content:
+
+---
+- name: Deploy Web Server Using Role
+  hosts: localhost
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    webserver_port: 8080
+    webserver_custom_content: |
+      <html>
+      <head>
+        <title>Advanced Ansible Lab</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 40px; }
+          .header { color: #2c3e50; text-align: center; }
+          .content { background-color: #ecf0f1; padding: 20px; border-radius: 5px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>🚀 Advanced Ansible Automation</h1>
+        </div>
+        <div class="content">
+          <h2>Lab 2: Modular Playbooks with Roles</h2>
+          <p><strong>Server:</strong> {{ ansible_hostname }}</p>
+          <p><strong>IP Address:</strong> {{ ansible_default_ipv4.address }}</p>
+          <p><strong>Port:</strong> {{ webserver_port }}</p>
+          <p><strong>Deployed:</strong> {{ ansible_date_time.iso8601 }}</p>
+          <hr>
+          <p>This web server was configured using an Ansible role!</p>
+        </div>
+      </body>
+      </html>
+
+  roles:
+    - webserver
+
+  post_tasks:
+    - name: Display deployment information
+      debug:
+        msg:
+          - "Web server deployment completed successfully!"
+          - "Service: {{ webserver_service }}"
+          - "Port: {{ webserver_port }}"
+          - "Document Root: {{ webserver_document_root }}"
+          - "Access URL: http://{{ ansible_default_ipv4.address }}:{{ webserver_port }}"
+
+Subtask 2.2: Create an Inventory File
+
+    Create a simple inventory file:
+
+vim inventory.ini
+
+    Add the following content:
+
+[webservers]
+localhost ansible_connection=local
+
+[webservers:vars]
+ansible_python_interpreter=/usr/bin/python3
+
+Subtask 2.3: Create an Advanced Multi-Host Playbook
+
+    Create a more complex playbook for multiple environments:
+
+vim site.yml
+
+    Add the following content:
+
+---
+- name: Deploy Web Servers Across Multiple Environments
+  hosts: webservers
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    environments:
+      development:
+        webserver_port: 8080
+        webserver_max_connections: 50
+      staging:
+        webserver_port: 8081
+        webserver_max_connections: 75
+      production:
+        webserver_port: 80
+        webserver_max_connections: 200
+
+  pre_tasks:
+    - name: Update package cache
+      package:
+        update_cache: yes
+      when: ansible_os_family == "RedHat"
+
+    - name: Ensure required packages are installed
+      package:
+        name:
+          - firewalld
+          - python3-firewall
+        state: present
+
+  roles:
+    - role: webserver
+      vars:
+        webserver_port: "{{ environments[deployment_env | default('development')].webserver_port }}"
+        webserver_max_connections: "{{ environments[deployment_env | default('development')].webserver_max_connections }}"
+
+  post_tasks:
+    - name: Verify web server is responding
+      uri:
+        url: "http://{{ ansible_default_ipv4.address }}:{{ webserver_port }}"
+        method: GET
+        status_code: 200
+      register: web_response
+      retries: 3
+      delay: 5
+
+    - name: Display verification results
+      debug:
+        msg:
+          - "Web server verification: {{ 'SUCCESS' if web_response.status == 200 else 'FAILED' }}"
+          - "Response time: {{ web_response.elapsed }} seconds"
+          - "Environment: {{ deployment_env | default('development') }}"
+
+Task 3: Test the Playbook
+Subtask 3.1: Perform Syntax Check
+
+    Check the playbook syntax:
+
+ansible-playbook deploy-webserver.yml -i inventory.ini --syntax-check
+
+    Check the role syntax specifically:
+
+ansible-playbook roles/webserver/tests/test.yml --syntax-check
+
+Subtask 3.2: Run the Playbook in Check Mode
+
+    Execute a dry run to see what changes would be made:
+
+ansible-playbook deploy-webserver.yml -i inventory.ini --check --diff
+
+This command will show you what changes Ansible would make without actually applying them.
+Subtask 3.3: Execute the Playbook
+
+    Run the playbook to deploy the web server:
+
+ansible-playbook deploy-webserver.yml -i inventory.ini -v
+
+    Monitor the output for any errors or warnings. You should see output similar to:
+
+PLAY [Deploy Web Server Using Role] *******************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [localhost]
+
+TASK [webserver : Install web server package] *********************************
+changed: [localhost]
+
+TASK [webserver : Create document root directory] *****************************
+ok: [localhost]
+
+TASK [webserver : Deploy custom index page] ***********************************
+changed: [localhost]
+
+TASK [webserver : Configure web server] ***************************************
+changed: [localhost]
+
+TASK [webserver : Start and enable web server service] ***********************
+changed: [localhost]
+
+TASK [webserver : Open firewall port] *****************************************
+changed: [localhost]
+
+RUNNING HANDLER [webserver : restart webserver] *******************************
+changed: [localhost]
+
+TASK [Display deployment information] *****************************************
+ok: [localhost] => {
+    "msg": [
+        "Web server deployment completed successfully!",
+        "Service: httpd",
+        "Port: 8080",
+        "Document Root: /var/www/html",
+        "Access URL: http://192.168.1.100:8080"
+    ]
+}
+
+PLAY RECAP *********************************************************************
+localhost                  : ok=8    changed=6    unreachable=0    failed=0
+
+Subtask 3.4: Test Different Environments
+
+    Test the staging environment:
+
+ansible-playbook site.yml -i inventory.ini -e "deployment_env=staging" -v
+
+    Test the production environment:
+
+ansible-playbook site.yml -i inventory.ini -e "deployment_env=production" -v
+
+Subtask 3.5: Verify the Web Server
+
+    Check if the web server is running:
+
+sudo systemctl status httpd
+
+    Test the web server response:
+
+curl -I http://localhost:8080
+
+Expected output:
+
+HTTP/1.1 200 OK
+Date: Wed, 15 Nov 2023 10:30:00 GMT
+Server: Apache/2.4.37 (Red Hat Enterprise Linux)
+Content-Type: text/html; charset=UTF-8
+
+    View the deployed web page:
+
+curl http://localhost:8080
+
+    Check the web server configuration:
+
+sudo httpd -t
+
+Subtask 3.6: Test Role Idempotency
+
+    Run the playbook again to verify idempotency:
+
+ansible-playbook deploy-webserver.yml -i inventory.ini
+
+The second run should show mostly "ok" status with no "changed" tasks, demonstrating that the role is idempotent.
+Subtask 3.7: Advanced Testing with Tags
+
+    Test specific parts of the role using tags:
+
+# Test only the installation tasks
+ansible-playbook deploy-webserver.yml -i inventory.ini --tags "install"
+
+# Test only the configuration tasks
+ansible-playbook deploy-webserver.yml -i inventory.ini --tags "configure"
+
+# Test only the service tasks
+ansible-playbook deploy-webserver.yml -i inventory.ini --tags "service"
+
+    Skip certain tasks using skip-tags:
+
+# Skip firewall configuration
+ansible-playbook deploy-webserver.yml -i inventory.ini --skip-tags "firewall"
+
+Subtask 3.8: Troubleshooting Common Issues
+
+If you encounter issues, try these troubleshooting steps:
+
+    Service fails to start:
+
+# Check service status
+sudo systemctl status httpd
+# Check logs
+sudo journalctl -u httpd -f
+
+    Port already in use:
+
+# Check what's using the port
+sudo netstat -tlnp | grep :8080
+# Kill the process if needed
+sudo kill -9 <PID>
+
+    Firewall issues:
+
+# Check firewall status
+sudo firewall-cmd --list-all
+# Manually open port if needed
+sudo firewall-cmd --permanent --add-port=8080/tcp
+sudo firewall-cmd --reload
+
+    Permission issues:
+
+# Check file permissions
+ls -la /var/www/html/
+# Fix permissions if needed
+sudo chown -R apache:apache /var/www/html/
+
+Advanced Role Features
+Subtask 3.9: Create Role Dependencies
+
+    Create a dependency role for common system setup:
+
+cd ~/ansible-lab/roles
+ansible-galaxy init common
+
+    Edit the common role tasks:
+
+vim common/tasks/main.yml
+
+---
+- name: Update system packages
+  package:
+    name: '*'
+    state: latest
+  become: yes
+  when: update_system | default(false)
+
+- name: Install common packages
+  package:
+    name:
+      - vim
+      - curl
+      - wget
+      - net-tools
+    state: present
+  become: yes
+
+- name: Configure timezone
+  timezone:
+    name: "{{ system_timezone | default('UTC') }}"
+  become: yes
+
+    Update webserver role to depend on common:
+
+vim webserver/meta/main.yml
+
+Add to the dependencies section:
+
+dependencies:
+  - role: common
+    vars:
+      system_timezone: "America/New_York"
+
+Subtask 3.10: Test Role with Dependencies
+
+    Run the playbook with the updated role:
+
+ansible-playbook deploy-webserver.yml -i inventory.ini -v
+
+Notice how the common role runs first, followed by the webserver role.
+Conclusion
+
+Congratulations! You have successfully completed Lab 2: Developing Modular Playbooks with Roles. Here's what you accomplished:
+Key Achievements
+
+    Created a Structured Ansible Role: You built a comprehensive webserver role with proper directory structure, including tasks, handlers, templates, variables, and metadata.
+
+    Implemented Modular Automation: You learned how to organize automation code into reusable components that can be shared across multiple playbooks and projects.
+
+    Applied Advanced Role Features: You worked with role variables, templates, handlers, and dependencies to create flexible and maintainable automation.
+
+    Tested Thoroughly: You performed syntax checks, dry runs, and live deployments while verifying idempotency and functionality.
+
+    Used Best Practices: You implemented proper tagging, error handling, and documentation within your roles.
+
+Why This Matters
+
+Scalability: Roles make your automation scalable by allowing you to reuse code across different environments and projects without duplication.
+
+Maintainability: With roles, you can update configuration logic in one place and have it apply everywhere the role is used.
+
+Collaboration: Roles enable teams to work together more effectively by providing standardized, tested components that can be shared and improved collectively.
+
+Professional Development: Understanding roles is essential for advanced Ansible automation and is a key requirement for Red Hat Ansible Automation Platform certifications.
+Next Steps
+
+    Explore Ansible Galaxy to discover and use community roles
+    Learn about role versioning and testing strategies
+    Practice creating roles for different services (databases, monitoring, etc.)
+    Study advanced role features like role arguments and conditional includes
+
+You now have the foundation to build sophisticated, enterprise-grade automation using Ansible roles. These skills are directly applicable to real-world infrastructure automation and will serve you well in your journey toward advanced Ansible certification.

@@ -1,0 +1,43 @@
+---
+- name: Multi-Environment Configuration
+  hosts: all
+  become: yes
+  vars_files:
+    - "environments/{{ env | default('development') }}.yml"
+  
+  tasks:
+    - name: Display environment information
+      debug:
+        msg: |
+          Environment: {{ environment }}
+          Web Port: {{ web_port }}
+          Debug Enabled: {{ debug_enabled }}
+          SSL Enabled: {{ ssl_enabled }}
+          Database Host: {{ database_config.host }}
+    
+    - name: Create environment-specific configuration
+      copy:
+        content: |
+          # {{ environment | upper }} Environment Configuration
+          Environment={{ environment }}
+          WebPort={{ web_port }}
+          DebugEnabled={{ debug_enabled }}
+          LogLevel={{ log_level }}
+          MaxConnections={{ max_connections }}
+          SSLEnabled={{ ssl_enabled }}
+          
+          # Database Configuration
+          DatabaseHost={{ database_config.host }}
+          DatabasePort={{ database_config.port }}
+          DatabaseName={{ database_config.name }}
+          DatabaseUser={{ database_config.user }}
+          
+          # Operational Settings
+          BackupRetention={{ backup_retention }}
+          MonitoringEnabled={{ monitoring_enabled }}
+        dest: "/etc/app-config.conf"
+        mode: '0644'
+    
+    - name: Configure service based on environment
+      debug:
+        msg: "Configuring {{ environment }} environment with {{ max_connections }} max connections"

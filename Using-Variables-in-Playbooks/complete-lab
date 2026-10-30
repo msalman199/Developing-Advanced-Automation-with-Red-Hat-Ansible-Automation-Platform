@@ -1,0 +1,748 @@
+Lab 4: Using Variables in Playbooks
+Objectives
+
+By the end of this lab, you will be able to:
+
+• Understand the importance and benefits of using variables in Ansible playbooks • Define and implement variables within playbooks using multiple methods • Use variables to configure services dynamically across different systems • Pass variables through command-line arguments and test their functionality • Create flexible and reusable playbooks that adapt to different environments
+Prerequisites
+
+Before starting this lab, you should have:
+
+• Basic understanding of YAML syntax and structure • Familiarity with Ansible playbook structure and components • Knowledge of Linux command-line operations • Understanding of basic system administration concepts • Completion of previous Ansible labs or equivalent experience • Basic text editor skills (vim, nano, or similar)
+Lab Environment
+
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment - no need to build your own virtual machines or install software.
+
+Your lab environment includes: • Control node with Ansible pre-installed • Two managed nodes (target systems) • All necessary network connectivity configured • Text editors and utilities available
+Task 1: Define Variables in a Playbook
+Subtask 1.1: Understanding Variable Types and Scope
+
+Variables in Ansible make playbooks flexible and reusable. Let's start by understanding different ways to define variables.
+
+Step 1: Connect to your control node and create a new directory for this lab.
+
+mkdir ~/lab4-variables
+cd ~/lab4-variables
+
+Step 2: Create your first playbook with inline variables.
+
+nano variables-basic.yml
+
+Step 3: Add the following content to demonstrate different variable definition methods:
+
+---
+- name: Basic Variables Demo
+  hosts: all
+  vars:
+    # Simple string variables
+    package_name: "httpd"
+    service_name: "httpd"
+    
+    # Numeric variables
+    port_number: 80
+    max_connections: 100
+    
+    # Boolean variables
+    enable_firewall: true
+    debug_mode: false
+    
+    # List variables
+    required_packages:
+      - httpd
+      - firewalld
+      - vim
+    
+    # Dictionary variables
+    web_config:
+      document_root: "/var/www/html"
+      server_admin: "admin@example.com"
+      timeout: 300
+  
+  tasks:
+    - name: Display string variable
+      debug:
+        msg: "Package to install: {{ package_name }}"
+    
+    - name: Display numeric variable
+      debug:
+        msg: "Port number: {{ port_number }}"
+    
+    - name: Display boolean variable
+      debug:
+        msg: "Firewall enabled: {{ enable_firewall }}"
+    
+    - name: Display list variable
+      debug:
+        msg: "Required packages: {{ required_packages }}"
+    
+    - name: Display dictionary variable
+      debug:
+        msg: "Document root: {{ web_config.document_root }}"
+    
+    - name: Loop through list variable
+      debug:
+        msg: "Installing package: {{ item }}"
+      loop: "{{ required_packages }}"
+
+Step 4: Test the playbook to see how variables work.
+
+ansible-playbook -i inventory variables-basic.yml
+
+Subtask 1.2: Using External Variable Files
+
+Step 1: Create a separate variables file for better organization.
+
+nano web-vars.yml
+
+Step 2: Add variables to the external file:
+
+---
+# Web server configuration variables
+web_package: "nginx"
+web_service: "nginx"
+web_port: 8080
+web_user: "nginx"
+
+# Site configuration
+site_name: "MyCompany Website"
+site_description: "Welcome to our corporate website"
+
+# File paths
+config_file: "/etc/nginx/nginx.conf"
+log_directory: "/var/log/nginx"
+web_root: "/usr/share/nginx/html"
+
+# Security settings
+ssl_enabled: false
+firewall_rules:
+  - port: 8080
+    protocol: "tcp"
+  - port: 443
+    protocol: "tcp"
+
+Step 3: Create a playbook that uses the external variables file.
+
+nano variables-external.yml
+
+Step 4: Add the following content:
+
+---
+- name: Using External Variables
+  hosts: all
+  vars_files:
+    - web-vars.yml
+  
+  tasks:
+    - name: Show web package variable
+      debug:
+        msg: "Web server package: {{ web_package }}"
+    
+    - name: Show site information
+      debug:
+        msg: "Site: {{ site_name }} - {{ site_description }}"
+    
+    - name: Display firewall rules
+      debug:
+        msg: "Rule: Port {{ item.port }}/{{ item.protocol }}"
+      loop: "{{ firewall_rules }}"
+
+Step 5: Run the playbook with external variables.
+
+ansible-playbook -i inventory variables-external.yml
+
+Subtask 1.3: Host and Group Variables
+
+Step 1: Create directories for host and group variables.
+
+mkdir -p group_vars host_vars
+
+Step 2: Create group variables for web servers.
+
+nano group_vars/all.yml
+
+Step 3: Add common variables for all hosts:
+
+---
+# Common variables for all hosts
+ntp_server: "pool.ntp.org"
+timezone: "America/New_York"
+admin_user: "ansible"
+
+# Common packages
+base_packages:
+  - vim
+  - curl
+  - wget
+  - htop
+
+Step 4: Create specific group variables.
+
+nano group_vars/webservers.yml
+
+Step 5: Add web server specific variables:
+
+---
+# Web server specific variables
+http_port: 80
+https_port: 443
+max_clients: 200
+
+web_packages:
+  - httpd
+  - mod_ssl
+  - php
+
+document_root: "/var/www/html"
+
+Step 6: Create host-specific variables (replace 'node1' with your actual hostname).
+
+nano host_vars/node1.yml
+
+Step 7: Add host-specific configuration:
+
+---
+# Host-specific variables for node1
+server_role: "primary"
+backup_enabled: true
+memory_limit: "2G"
+custom_config:
+  max_upload_size: "50M"
+  session_timeout: 1800
+
+Task 2: Use Variables for Configuring a Service
+Subtask 2.1: Create a Web Server Configuration Playbook
+
+Step 1: Create a comprehensive playbook that uses variables to configure a web server.
+
+nano configure-webserver.yml
+
+Step 2: Add the following playbook content:
+
+---
+- name: Configure Web Server Using Variables
+  hosts: all
+  become: yes
+  vars:
+    # Service configuration variables
+    web_service: "httpd"
+    web_package: "httpd"
+    web_port: 80
+    web_user: "apache"
+    
+    # Directory variables
+    document_root: "/var/www/html"
+    log_directory: "/var/log/httpd"
+    config_directory: "/etc/httpd/conf.d"
+    
+    # Content variables
+    index_title: "Welcome to {{ ansible_hostname }}"
+    index_content: |
+      <h1>{{ index_title }}</h1>
+      <p>This server is managed by Ansible</p>
+      <p>Server: {{ ansible_hostname }}</p>
+      <p>IP Address: {{ ansible_default_ipv4.address }}</p>
+      <p>Operating System: {{ ansible_distribution }} {{ ansible_distribution_version }}</p>
+    
+    # Configuration template variables
+    server_admin: "webmaster@{{ ansible_domain | default('localhost') }}"
+    server_tokens: "Prod"
+    timeout: 60
+    
+  tasks:
+    - name: Install web server package
+      package:
+        name: "{{ web_package }}"
+        state: present
+    
+    - name: Create document root directory
+      file:
+        path: "{{ document_root }}"
+        state: directory
+        owner: "{{ web_user }}"
+        group: "{{ web_user }}"
+        mode: '0755'
+    
+    - name: Create custom configuration file
+      copy:
+        content: |
+          # Custom Apache Configuration
+          ServerTokens {{ server_tokens }}
+          Timeout {{ timeout }}
+          
+          <VirtualHost *:{{ web_port }}>
+              ServerAdmin {{ server_admin }}
+              DocumentRoot {{ document_root }}
+              ServerName {{ ansible_hostname }}
+              
+              <Directory "{{ document_root }}">
+                  AllowOverride None
+                  Require all granted
+              </Directory>
+              
+              ErrorLog {{ log_directory }}/error.log
+              CustomLog {{ log_directory }}/access.log combined
+          </VirtualHost>
+        dest: "{{ config_directory }}/custom.conf"
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart web service
+    
+    - name: Create index.html with variables
+      copy:
+        content: |
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>{{ index_title }}</title>
+              <style>
+                  body { font-family: Arial, sans-serif; margin: 40px; }
+                  h1 { color: #333; }
+                  .info { background: #f0f0f0; padding: 10px; margin: 10px 0; }
+              </style>
+          </head>
+          <body>
+              {{ index_content }}
+              <div class="info">
+                  <strong>Configuration Details:</strong><br>
+                  Web Service: {{ web_service }}<br>
+                  Port: {{ web_port }}<br>
+                  Document Root: {{ document_root }}<br>
+                  Server Admin: {{ server_admin }}
+              </div>
+          </body>
+          </html>
+        dest: "{{ document_root }}/index.html"
+        owner: "{{ web_user }}"
+        group: "{{ web_user }}"
+        mode: '0644'
+    
+    - name: Start and enable web service
+      service:
+        name: "{{ web_service }}"
+        state: started
+        enabled: yes
+    
+    - name: Open firewall port
+      firewalld:
+        port: "{{ web_port }}/tcp"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      ignore_errors: yes
+  
+  handlers:
+    - name: restart web service
+      service:
+        name: "{{ web_service }}"
+        state: restarted
+
+Step 3: Run the playbook to configure the web server.
+
+ansible-playbook -i inventory configure-webserver.yml
+
+Subtask 2.2: Create a Multi-Environment Configuration
+
+Step 1: Create environment-specific variable files.
+
+mkdir environments
+nano environments/development.yml
+
+Step 2: Add development environment variables:
+
+---
+# Development environment variables
+environment: "development"
+web_port: 8080
+debug_enabled: true
+log_level: "debug"
+max_connections: 50
+ssl_enabled: false
+
+database_config:
+  host: "dev-db.local"
+  port: 3306
+  name: "dev_database"
+  user: "dev_user"
+
+backup_retention: 7
+monitoring_enabled: false
+
+Step 3: Create production environment variables.
+
+nano environments/production.yml
+
+Step 4: Add production environment variables:
+
+---
+# Production environment variables
+environment: "production"
+web_port: 80
+debug_enabled: false
+log_level: "warn"
+max_connections: 200
+ssl_enabled: true
+
+database_config:
+  host: "prod-db.local"
+  port: 3306
+  name: "prod_database"
+  user: "prod_user"
+
+backup_retention: 30
+monitoring_enabled: true
+
+Step 5: Create an environment-aware playbook.
+
+nano multi-environment.yml
+
+Step 6: Add the following content:
+
+---
+- name: Multi-Environment Configuration
+  hosts: all
+  become: yes
+  vars_files:
+    - "environments/{{ env | default('development') }}.yml"
+  
+  tasks:
+    - name: Display environment information
+      debug:
+        msg: |
+          Environment: {{ environment }}
+          Web Port: {{ web_port }}
+          Debug Enabled: {{ debug_enabled }}
+          SSL Enabled: {{ ssl_enabled }}
+          Database Host: {{ database_config.host }}
+    
+    - name: Create environment-specific configuration
+      copy:
+        content: |
+          # {{ environment | upper }} Environment Configuration
+          Environment={{ environment }}
+          WebPort={{ web_port }}
+          DebugEnabled={{ debug_enabled }}
+          LogLevel={{ log_level }}
+          MaxConnections={{ max_connections }}
+          SSLEnabled={{ ssl_enabled }}
+          
+          # Database Configuration
+          DatabaseHost={{ database_config.host }}
+          DatabasePort={{ database_config.port }}
+          DatabaseName={{ database_config.name }}
+          DatabaseUser={{ database_config.user }}
+          
+          # Operational Settings
+          BackupRetention={{ backup_retention }}
+          MonitoringEnabled={{ monitoring_enabled }}
+        dest: "/etc/app-config.conf"
+        mode: '0644'
+    
+    - name: Configure service based on environment
+      debug:
+        msg: "Configuring {{ environment }} environment with {{ max_connections }} max connections"
+
+Task 3: Pass Variables via Command Line and Test
+Subtask 3.1: Using Extra Variables (-e flag)
+
+Step 1: Test the multi-environment playbook with development settings.
+
+ansible-playbook -i inventory multi-environment.yml -e "env=development"
+
+Step 2: Test with production settings.
+
+ansible-playbook -i inventory multi-environment.yml -e "env=production"
+
+Step 3: Override specific variables from command line.
+
+ansible-playbook -i inventory configure-webserver.yml -e "web_port=8080" -e "index_title='Custom Title from Command Line'"
+
+Subtask 3.2: Using JSON Format for Complex Variables
+
+Step 1: Pass complex variables using JSON format.
+
+ansible-playbook -i inventory configure-webserver.yml -e '{"web_port": 9090, "server_admin": "admin@mycompany.com", "timeout": 120}'
+
+Step 2: Create a playbook that accepts multiple command-line variables.
+
+nano command-line-vars.yml
+
+Step 3: Add the following content:
+
+---
+- name: Command Line Variables Demo
+  hosts: all
+  vars:
+    # Default values (can be overridden)
+    app_name: "default-app"
+    app_version: "1.0.0"
+    app_port: 3000
+    app_environment: "development"
+    
+  tasks:
+    - name: Display all variables
+      debug:
+        msg: |
+          Application: {{ app_name }}
+          Version: {{ app_version }}
+          Port: {{ app_port }}
+          Environment: {{ app_environment }}
+          
+    - name: Create application configuration
+      copy:
+        content: |
+          [application]
+          name={{ app_name }}
+          version={{ app_version }}
+          port={{ app_port }}
+          environment={{ app_environment }}
+          
+          [runtime]
+          timestamp={{ ansible_date_time.iso8601 }}
+          hostname={{ ansible_hostname }}
+          managed_by=ansible
+        dest: "/tmp/{{ app_name }}-config.ini"
+        mode: '0644'
+    
+    - name: Show configuration file location
+      debug:
+        msg: "Configuration saved to: /tmp/{{ app_name }}-config.ini"
+
+Step 4: Test with various command-line variable combinations.
+
+# Test with default values
+ansible-playbook -i inventory command-line-vars.yml
+
+# Override single variable
+ansible-playbook -i inventory command-line-vars.yml -e "app_name=mywebapp"
+
+# Override multiple variables
+ansible-playbook -i inventory command-line-vars.yml -e "app_name=mywebapp" -e "app_version=2.1.0" -e "app_port=8080" -e "app_environment=production"
+
+Subtask 3.3: Using Variable Files from Command Line
+
+Step 1: Create a custom variables file.
+
+nano custom-vars.yml
+
+Step 2: Add custom configuration:
+
+---
+# Custom variables for testing
+app_name: "custom-application"
+app_version: "3.0.0"
+app_port: 5000
+app_environment: "staging"
+
+features:
+  - authentication
+  - logging
+  - monitoring
+  - caching
+
+database:
+  type: "postgresql"
+  host: "db.staging.local"
+  port: 5432
+  ssl: true
+
+Step 3: Use the custom variables file.
+
+ansible-playbook -i inventory command-line-vars.yml -e "@custom-vars.yml"
+
+Subtask 3.4: Variable Precedence Testing
+
+Step 1: Create a playbook to demonstrate variable precedence.
+
+nano precedence-test.yml
+
+Step 2: Add the following content:
+
+---
+- name: Variable Precedence Test
+  hosts: all
+  vars:
+    test_var: "playbook_vars"
+    priority_var: "from_playbook"
+  vars_files:
+    - precedence-vars.yml
+  
+  tasks:
+    - name: Show variable values and their sources
+      debug:
+        msg: |
+          test_var: {{ test_var }}
+          priority_var: {{ priority_var }}
+          command_line_var: {{ command_line_var | default('not_set') }}
+    
+    - name: Create precedence demonstration file
+      copy:
+        content: |
+          Variable Precedence Demonstration
+          =================================
+          
+          test_var: {{ test_var }}
+          priority_var: {{ priority_var }}
+          command_line_var: {{ command_line_var | default('not_set') }}
+          
+          Precedence Order (highest to lowest):
+          1. Command line (-e)
+          2. vars_files
+          3. vars section in playbook
+          4. group_vars
+          5. host_vars
+        dest: "/tmp/precedence-test.txt"
+        mode: '0644'
+
+Step 3: Create the variables file for precedence testing.
+
+nano precedence-vars.yml
+
+Step 4: Add variables:
+
+---
+test_var: "vars_files"
+priority_var: "from_vars_files"
+file_var: "only_in_file"
+
+Step 5: Test variable precedence with different methods.
+
+# Test with file variables only
+ansible-playbook -i inventory precedence-test.yml
+
+# Override with command line
+ansible-playbook -i inventory precedence-test.yml -e "test_var=command_line" -e "command_line_var=set_from_cli"
+
+# Check the results
+ansible all -i inventory -m shell -a "cat /tmp/precedence-test.txt"
+
+Subtask 3.5: Advanced Variable Testing and Validation
+
+Step 1: Create a comprehensive testing playbook.
+
+nano variable-validation.yml
+
+Step 2: Add validation and testing logic:
+
+---
+- name: Variable Validation and Testing
+  hosts: all
+  vars:
+    required_vars:
+      - app_name
+      - app_version
+      - environment
+    
+    default_config:
+      timeout: 30
+      retries: 3
+      debug: false
+  
+  tasks:
+    - name: Validate required variables are defined
+      fail:
+        msg: "Required variable {{ item }} is not defined"
+      when: vars[item] is not defined
+      loop: "{{ required_vars }}"
+    
+    - name: Show all defined variables
+      debug:
+        msg: |
+          App Name: {{ app_name }}
+          App Version: {{ app_version }}
+          Environment: {{ environment }}
+          Timeout: {{ default_config.timeout }}
+          Retries: {{ default_config.retries }}
+          Debug: {{ default_config.debug }}
+    
+    - name: Test conditional logic based on variables
+      debug:
+        msg: "Running in production mode - extra security enabled"
+      when: environment == "production"
+    
+    - name: Test conditional logic for development
+      debug:
+        msg: "Running in development mode - debug features enabled"
+      when: environment == "development"
+    
+    - name: Create final configuration summary
+      copy:
+        content: |
+          Application Configuration Summary
+          ================================
+          
+          Application: {{ app_name }} v{{ app_version }}
+          Environment: {{ environment }}
+          
+          Configuration:
+          - Timeout: {{ default_config.timeout }} seconds
+          - Retries: {{ default_config.retries }}
+          - Debug Mode: {{ default_config.debug }}
+          
+          System Information:
+          - Hostname: {{ ansible_hostname }}
+          - OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          - Architecture: {{ ansible_architecture }}
+          
+          Generated: {{ ansible_date_time.iso8601 }}
+        dest: "/tmp/final-config-{{ app_name }}.txt"
+        mode: '0644'
+
+Step 3: Test the validation playbook.
+
+# This should fail due to missing required variables
+ansible-playbook -i inventory variable-validation.yml
+
+# This should succeed
+ansible-playbook -i inventory variable-validation.yml -e "app_name=testapp" -e "app_version=1.0" -e "environment=development"
+
+# Test with production environment
+ansible-playbook -i inventory variable-validation.yml -e "app_name=prodapp" -e "app_version=2.0" -e "environment=production"
+
+Step 4: Verify the results.
+
+# Check generated configuration files
+ansible all -i inventory -m shell -a "ls -la /tmp/*config*.txt"
+ansible all -i inventory -m shell -a "cat /tmp/final-config-*.txt"
+
+Troubleshooting Common Issues
+Variable Not Found Errors
+
+If you encounter "variable not found" errors:
+
+# Check if variable is properly defined
+ansible-playbook -i inventory your-playbook.yml --check -v
+
+# Use default values to prevent errors
+# In your playbook: {{ variable_name | default('default_value') }}
+
+YAML Syntax Errors
+
+For YAML formatting issues:
+
+# Validate YAML syntax
+ansible-playbook -i inventory your-playbook.yml --syntax-check
+
+# Check indentation (use spaces, not tabs)
+# Ensure proper quoting of strings with special characters
+
+Variable Precedence Issues
+
+To debug variable precedence:
+
+# Use debug module to show variable values
+# Add this task to your playbook:
+- debug:
+    var: variable_name
+
+Conclusion
+
+In this lab, you have successfully learned how to use variables in Ansible playbooks to create flexible and adaptable automation solutions. You accomplished the following key objectives:
+
+What You Learned: • Variable Definition: You learned multiple ways to define variables including inline vars, external files, group_vars, and host_vars • Variable Types: You worked with strings, numbers, booleans, lists, and dictionaries to handle different data types • Service Configuration: You used variables to dynamically configure web services, making your playbooks adaptable to different environments • Command-Line Variables: You mastered passing variables via command line using the -e flag and JSON format • Variable Precedence: You understood how Ansible resolves variable conflicts and the order of precedence • Validation and Testing: You implemented variable validation and conditional logic based on variable values
+
+Why This Matters: Variables are fundamental to creating maintainable and scalable Ansible automation. They allow you to: • Write reusable playbooks that work across different environments • Separate configuration from code, following DevOps best practices • Reduce duplication and maintenance overhead • Enable dynamic behavior based on system characteristics • Support multiple deployment scenarios with the same codebase
+
+Real-World Applications: The skills you've developed in this lab directly apply to: • Multi-environment deployments (dev, staging, production) • Configuration management across diverse infrastructure • Application deployment with environment-specific settings • Infrastructure as Code implementations • Automated system provisioning and configuration
+
+You now have the foundation to create sophisticated, variable-driven playbooks that can adapt to any environment or requirement, making your automation both powerful and maintainable.

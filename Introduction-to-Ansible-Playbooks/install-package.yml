@@ -1,0 +1,62 @@
+---
+- name: Install htop package on managed nodes
+  hosts: all
+  become: yes
+  become_method: sudo
+  
+  tasks:
+    - name: Update package cache (Ubuntu/Debian)
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+      
+    - name: Update package cache (CentOS/RHEL)
+      yum:
+        update_cache: yes
+      when: ansible_os_family == "RedHat"
+      
+    - name: Install htop package on Ubuntu/Debian systems
+      apt:
+        name: htop
+        state: present
+      when: ansible_os_family == "Debian"
+      
+    - name: Install htop package on CentOS/RHEL systems
+      yum:
+        name: htop
+        state: present
+      when: ansible_os_family == "RedHat"
+      
+    - name: Verify htop installation
+      command: which htop
+      register: htop_path
+      changed_when: false
+      
+    - name: Display htop installation path
+      debug:
+        msg: "htop is installed at: {{ htop_path.stdout }}"
+
+
+- name: Install packages on Ubuntu/Debian systems
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ packages_to_install }}"
+  when: ansible_os_family == "Debian"
+  tags:
+    - packages
+    - debian
+- name: Install package with error handling
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ packages_to_install }}"
+  register: install_result
+  ignore_errors: yes
+  
+- name: Report failed installations
+  debug:
+    msg: "Failed to install: {{ item.item }}"
+  loop: "{{ install_result.results }}"
+  when: item.failed is defined and item.failed

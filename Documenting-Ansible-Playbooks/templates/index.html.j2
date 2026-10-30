@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<!--
+    Template: index.html.j2
+    Purpose: Default landing page rendered by web-server-setup.yml
+    Generated: {{ ansible_date_time.iso8601 }}
+    Host: {{ inventory_hostname }}
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ inventory_hostname }} - Ansible Documentation Lab</title>
+</head>
+<body>
+    <h1>Welcome to {{ inventory_hostname }}</h1>
+    <ul>
+        <li>Operating System: {{ ansible_distribution }} {{ ansible_distribution_version }}</li>
+        <li>Document Root: {{ web_content.document_root }}</li>
+        <li>Rendered: {{ ansible_date_time.date }} {{ ansible_date_time.time }}</li>
+    </ul>
+    <p><em>Deployed via Ansible for documentation practice.</em></p>
+</body>
+</html>

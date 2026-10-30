@@ -1,0 +1,13 @@
+---
+- name: Non-Idempotent Example
+  hosts: node1
+  become: yes
+  tasks:
+    - name: Add text to file (non-idempotent)
+      shell: echo "$(date): Playbook executed" >> /tmp/execution_log.txt
+      
+    - name: Create user with shell command (non-idempotent)
+      shell: useradd testuser1 || true
+      
+    - name: Install package with shell (non-idempotent)
+      shell: yum install -y tree

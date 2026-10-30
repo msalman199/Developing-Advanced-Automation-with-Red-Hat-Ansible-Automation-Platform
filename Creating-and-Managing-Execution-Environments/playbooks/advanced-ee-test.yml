@@ -1,0 +1,66 @@
+---
+- name: Advanced Execution Environment Test
+  hosts: localhost
+  gather_facts: yes
+
+  tasks:
+    - name: Generate random password using password lookup
+      set_fact:
+        random_password: "{{ lookup('password', '/dev/null length=12 chars=ascii_letters,digits') }}"
+
+    - name: Display generated password
+      debug:
+        msg: "Generated password: {{ random_password }}"
+
+    - name: Test network calculations with netaddr filter
+      set_fact:
+        network_info: "{{ '192.168.1.0/24' | ansible.netcommon.ipaddr('network') | default('192.168.1.0') }}"
+      ignore_errors: yes
+
+    - name: Display network information
+      debug:
+        msg: "Network: {{ network_info }}"
+
+    - name: Create a JSON data structure
+      set_fact:
+        test_data:
+          execution_environment: "custom-ansible-ee"
+          timestamp: "{{ ansible_date_time.iso8601 }}"
+          system_info:
+            hostname: "{{ ansible_hostname }}"
+            architecture: "{{ ansible_architecture }}"
+            distribution: "{{ ansible_distribution }}"
+
+    - name: Display JSON data
+      debug:
+        var: test_data
+
+    - name: Create test directory
+      file:
+        path: /tmp/ee-test-directory
+        state: directory
+        mode: '0755'
+
+    - name: Create test files
+      copy:
+        content: "Test file {{ item }}"
+        dest: "/tmp/ee-test-directory/test-{{ item }}.txt"
+      loop:
+        - 1
+        - 2
+        - 3
+
+    - name: List created files
+      find:
+        paths: /tmp/ee-test-directory
+        patterns: "*.txt"
+      register: created_files
+
+    - name: Display created files
+      debug:
+        msg: "Created files: {{ created_files.files | map(attribute='path') | list }}"
+
+    - name: Clean up test directory
+      file:
+        path: /tmp/ee-test-directory
+        state: absent

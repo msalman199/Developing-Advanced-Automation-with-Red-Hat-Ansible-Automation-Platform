@@ -1,0 +1,623 @@
+Lab 6: Working with Content Collections
+Objectives
+
+By the end of this lab, you will be able to:
+
+• Understand what Ansible Content Collections are and their benefits • Download and install content collections from Ansible Galaxy • Browse and explore collection contents and documentation • Use roles from collections in your playbooks • Implement collection-based automation solutions • Troubleshoot common collection-related issues
+Prerequisites
+
+Before starting this lab, you should have:
+
+• Basic understanding of Ansible fundamentals (playbooks, roles, tasks) • Familiarity with YAML syntax • Experience running Ansible commands from the command line • Knowledge of Linux command-line operations • Understanding of SSH key-based authentication
+Lab Environment
+
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment - no need to build your own VM or install software.
+
+Your lab environment includes: • Control node with Ansible pre-installed • Two managed nodes (target servers) • All necessary SSH keys configured • Internet access for downloading collections
+Task 1: Understanding and Installing Content Collections
+Subtask 1.1: Explore Available Collections
+
+First, let's understand what collections are available and how to find them.
+
+    Connect to your control node and verify Ansible installation:
+
+ansible --version
+
+    Search for available collections on Ansible Galaxy:
+
+ansible-galaxy collection list
+
+    Search for specific collections related to system administration:
+
+ansible-galaxy collection search community.general
+
+    View detailed information about a specific collection:
+
+ansible-galaxy collection info community.general
+
+Subtask 1.2: Install Your First Collection
+
+Now let's install a popular collection that contains many useful modules and roles.
+
+    Install the community.general collection:
+
+ansible-galaxy collection install community.general
+
+    Install a specific version of a collection:
+
+ansible-galaxy collection install community.crypto:2.0.0
+
+    Verify the installation by listing installed collections:
+
+ansible-galaxy collection list
+
+    Check the installation path:
+
+ls -la ~/.ansible/collections/ansible_collections/
+
+Subtask 1.3: Install Collections from Requirements File
+
+Create a requirements file for managing multiple collections.
+
+    Create a requirements file:
+
+cat > requirements.yml << EOF
+---
+collections:
+  - name: community.general
+    version: ">=5.0.0"
+  - name: community.crypto
+    version: ">=2.0.0"
+  - name: ansible.posix
+    version: ">=1.0.0"
+EOF
+
+    Install collections from the requirements file:
+
+ansible-galaxy collection install -r requirements.yml
+
+    Force reinstall if collections already exist:
+
+ansible-galaxy collection install -r requirements.yml --force
+
+Task 2: Using Roles from Collections in Playbooks
+Subtask 2.1: Explore Collection Structure
+
+Let's examine what's inside a collection and understand its structure.
+
+    Navigate to the collection directory:
+
+cd ~/.ansible/collections/ansible_collections/community/general/
+
+    Explore the collection structure:
+
+ls -la
+
+    View available roles in the collection:
+
+ls -la roles/
+
+    Check available modules:
+
+ls -la plugins/modules/ | head -20
+
+Subtask 2.2: Create Inventory File
+
+Set up your inventory for the managed nodes.
+
+    Create an inventory file:
+
+cat > inventory.ini << EOF
+[webservers]
+node1 ansible_host=10.0.1.10
+node2 ansible_host=10.0.1.11
+
+[all:vars]
+ansible_user=ec2-user
+ansible_ssh_private_key_file=~/.ssh/lab-key.pem
+EOF
+
+    Test connectivity to your managed nodes:
+
+ansible all -i inventory.ini -m ping
+
+Subtask 2.3: Create a Playbook Using Collection Modules
+
+Now let's create a playbook that uses modules from the installed collections.
+
+    Create a playbook using collection modules:
+
+cat > collection-demo.yml << EOF
+---
+- name: Demonstrate Collection Usage
+  hosts: webservers
+  become: yes
+  vars:
+    packages_to_install:
+      - htop
+      - tree
+      - curl
+    
+  tasks:
+    - name: Install packages using community.general.package_facts
+      package_facts:
+        manager: auto
+      
+    - name: Display installed package count
+      debug:
+        msg: "Total packages installed: {{ ansible_facts.packages | length }}"
+    
+    - name: Install additional packages
+      package:
+        name: "{{ packages_to_install }}"
+        state: present
+    
+    - name: Create a directory with specific permissions
+      file:
+        path: /opt/demo-app
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+    
+    - name: Generate a random password using community.general.password_hash
+      set_fact:
+        random_password: "{{ 'demo123' | password_hash('sha512') }}"
+    
+    - name: Create a demo user with hashed password
+      user:
+        name: demouser
+        password: "{{ random_password }}"
+        shell: /bin/bash
+        create_home: yes
+        state: present
+    
+    - name: Use community.general.timezone module
+      community.general.timezone:
+        name: America/New_York
+      notify: restart chronyd
+    
+    - name: Check system information using setup module
+      setup:
+        gather_subset:
+          - hardware
+          - network
+    
+    - name: Display network interface information
+      debug:
+        msg: "Primary IP: {{ ansible_default_ipv4.address }}"
+      when: ansible_default_ipv4 is defined
+
+  handlers:
+    - name: restart chronyd
+      service:
+        name: chronyd
+        state: restarted
+      ignore_errors: yes
+EOF
+
+    Run the playbook:
+
+ansible-playbook -i inventory.ini collection-demo.yml
+
+Subtask 2.4: Using Collection Roles
+
+Let's explore how to use roles from collections in your playbooks.
+
+    Create a playbook that uses a collection role:
+
+cat > role-demo.yml << EOF
+---
+- name: Using Collection Roles Demo
+  hosts: webservers
+  become: yes
+  
+  tasks:
+    - name: Include tasks from community.general collection
+      include_tasks: security-hardening.yml
+    
+    - name: Use community.general.firewalld module
+      community.general.firewalld:
+        service: http
+        permanent: yes
+        state: enabled
+        immediate: yes
+      ignore_errors: yes
+    
+    - name: Configure system using ansible.posix collection
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: '0'
+        state: present
+        reload: yes
+      ignore_errors: yes
+EOF
+
+    Create the security hardening tasks file:
+
+cat > security-hardening.yml << EOF
+---
+- name: Disable unused services
+  service:
+    name: "{{ item }}"
+    state: stopped
+    enabled: no
+  loop:
+    - rpcbind
+    - nfs-server
+  ignore_errors: yes
+
+- name: Set secure file permissions
+  file:
+    path: "{{ item }}"
+    mode: '0600'
+  loop:
+    - /etc/ssh/sshd_config
+    - /etc/shadow
+  ignore_errors: yes
+
+- name: Configure SSH security
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    backup: yes
+  loop:
+    - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin no' }
+    - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication no' }
+  notify: restart sshd
+  ignore_errors: yes
+EOF
+
+    Run the role demonstration playbook:
+
+ansible-playbook -i inventory.ini role-demo.yml
+
+Subtask 2.5: Advanced Collection Usage
+
+Let's create a more complex example that demonstrates advanced collection features.
+
+    Create an advanced playbook with multiple collections:
+
+cat > advanced-collections.yml << EOF
+---
+- name: Advanced Collection Features Demo
+  hosts: webservers
+  become: yes
+  vars:
+    web_content: |
+      <!DOCTYPE html>
+      <html>
+      <head><title>Collection Demo</title></head>
+      <body>
+        <h1>Ansible Collections Demo</h1>
+        <p>Server: {{ inventory_hostname }}</p>
+        <p>Generated at: {{ ansible_date_time.iso8601 }}</p>
+      </body>
+      </html>
+  
+  tasks:
+    - name: Gather system facts
+      setup:
+    
+    - name: Install web server
+      package:
+        name: httpd
+        state: present
+    
+    - name: Start and enable web server
+      service:
+        name: httpd
+        state: started
+        enabled: yes
+    
+    - name: Create web content using template
+      copy:
+        content: "{{ web_content }}"
+        dest: /var/www/html/index.html
+        mode: '0644'
+    
+    - name: Configure firewall using community.general
+      community.general.firewalld:
+        service: http
+        permanent: yes
+        state: enabled
+        immediate: yes
+      ignore_errors: yes
+    
+    - name: Create SSL certificate directory
+      file:
+        path: /etc/ssl/demo
+        state: directory
+        mode: '0755'
+    
+    - name: Generate private key using community.crypto
+      community.crypto.openssl_privatekey:
+        path: /etc/ssl/demo/server.key
+        size: 2048
+        type: RSA
+    
+    - name: Generate certificate signing request
+      community.crypto.openssl_csr:
+        path: /etc/ssl/demo/server.csr
+        privatekey_path: /etc/ssl/demo/server.key
+        common_name: "{{ inventory_hostname }}"
+        country_name: US
+        state_or_province_name: California
+        locality_name: San Francisco
+        organization_name: Demo Organization
+    
+    - name: Generate self-signed certificate
+      community.crypto.x509_certificate:
+        path: /etc/ssl/demo/server.crt
+        privatekey_path: /etc/ssl/demo/server.key
+        csr_path: /etc/ssl/demo/server.csr
+        provider: selfsigned
+    
+    - name: Verify web service is running
+      uri:
+        url: "http://{{ inventory_hostname }}"
+        method: GET
+        status_code: 200
+      delegate_to: localhost
+      ignore_errors: yes
+    
+    - name: Display certificate information
+      community.crypto.x509_certificate_info:
+        path: /etc/ssl/demo/server.crt
+      register: cert_info
+    
+    - name: Show certificate details
+      debug:
+        msg: |
+          Certificate Subject: {{ cert_info.subject }}
+          Valid from: {{ cert_info.not_before }}
+          Valid until: {{ cert_info.not_after }}
+EOF
+
+    Execute the advanced playbook:
+
+ansible-playbook -i inventory.ini advanced-collections.yml
+
+Subtask 2.6: Creating Custom Collection Usage
+
+Let's create a playbook that demonstrates how to organize your own collection-style structure.
+
+    Create a custom collection structure:
+
+mkdir -p custom_collection/{roles,playbooks,group_vars}
+
+    Create a custom role within your structure:
+
+mkdir -p custom_collection/roles/webapp/{tasks,templates,vars,handlers}
+
+    Create the main task file for the custom role:
+
+cat > custom_collection/roles/webapp/tasks/main.yml << EOF
+---
+- name: Install web application dependencies
+  package:
+    name: "{{ webapp_packages }}"
+    state: present
+
+- name: Create application directory
+  file:
+    path: "{{ webapp_dir }}"
+    state: directory
+    owner: "{{ webapp_user }}"
+    group: "{{ webapp_group }}"
+    mode: '0755'
+
+- name: Deploy application configuration
+  template:
+    src: app.conf.j2
+    dest: "{{ webapp_dir }}/app.conf"
+    owner: "{{ webapp_user }}"
+    group: "{{ webapp_group }}"
+    mode: '0644'
+  notify: restart webapp
+
+- name: Start application service
+  service:
+    name: "{{ webapp_service }}"
+    state: started
+    enabled: yes
+EOF
+
+    Create role variables:
+
+cat > custom_collection/roles/webapp/vars/main.yml << EOF
+---
+webapp_packages:
+  - httpd
+  - mod_ssl
+webapp_dir: /opt/webapp
+webapp_user: apache
+webapp_group: apache
+webapp_service: httpd
+EOF
+
+    Create a template file:
+
+cat > custom_collection/roles/webapp/templates/app.conf.j2 << EOF
+# Web Application Configuration
+# Generated by Ansible on {{ ansible_date_time.iso8601 }}
+
+ServerName {{ inventory_hostname }}
+DocumentRoot {{ webapp_dir }}/html
+ErrorLog {{ webapp_dir }}/logs/error.log
+CustomLog {{ webapp_dir }}/logs/access.log combined
+
+<Directory "{{ webapp_dir }}/html">
+    AllowOverride None
+    Require all granted
+</Directory>
+EOF
+
+    Create handlers:
+
+cat > custom_collection/roles/webapp/handlers/main.yml << EOF
+---
+- name: restart webapp
+  service:
+    name: "{{ webapp_service }}"
+    state: restarted
+EOF
+
+    Create a playbook that uses your custom role:
+
+cat > custom_collection/playbooks/deploy-webapp.yml << EOF
+---
+- name: Deploy Web Application
+  hosts: webservers
+  become: yes
+  
+  pre_tasks:
+    - name: Update system packages
+      package:
+        name: '*'
+        state: latest
+      when: ansible_os_family == "RedHat"
+  
+  roles:
+    - webapp
+  
+  post_tasks:
+    - name: Verify application deployment
+      uri:
+        url: "http://{{ inventory_hostname }}"
+        method: GET
+        status_code: [200, 403]
+      delegate_to: localhost
+      ignore_errors: yes
+      
+    - name: Display deployment summary
+      debug:
+        msg: |
+          Deployment completed for {{ inventory_hostname }}
+          Application directory: {{ webapp_dir }}
+          Service status: {{ ansible_facts.services[webapp_service].state | default('unknown') }}
+EOF
+
+    Run your custom collection playbook:
+
+cd custom_collection
+ansible-playbook -i ../inventory.ini playbooks/deploy-webapp.yml
+
+Troubleshooting Common Issues
+Issue 1: Collection Not Found
+
+Problem: Error message "Collection not found"
+
+Solution:
+
+# Verify collection installation
+ansible-galaxy collection list
+
+# Reinstall if necessary
+ansible-galaxy collection install community.general --force
+
+# Check collection path
+echo $ANSIBLE_COLLECTIONS_PATH
+
+Issue 2: Module Not Found in Collection
+
+Problem: "Module not found" error when using collection modules
+
+Solution:
+
+# Use fully qualified collection name (FQCN)
+# Instead of: firewalld
+# Use: community.general.firewalld
+
+# Verify module exists in collection
+ansible-doc community.general.firewalld
+
+Issue 3: Permission Issues
+
+Problem: Permission denied when installing collections
+
+Solution:
+
+# Install to user directory
+ansible-galaxy collection install community.general --user
+
+# Or specify custom path
+ansible-galaxy collection install community.general -p ./collections
+
+Issue 4: Version Conflicts
+
+Problem: Collection version conflicts
+
+Solution:
+
+# Check installed versions
+ansible-galaxy collection list
+
+# Install specific version
+ansible-galaxy collection install community.general:5.0.0 --force
+
+# Use requirements file for version management
+cat > requirements.yml << EOF
+collections:
+  - name: community.general
+    version: ">=5.0.0,<6.0.0"
+EOF
+
+Verification and Testing
+Verify Your Lab Completion
+
+    Check installed collections:
+
+ansible-galaxy collection list
+
+    Verify playbook execution:
+
+ansible-playbook -i inventory.ini collection-demo.yml --check
+
+    Test collection modules:
+
+ansible webservers -i inventory.ini -m community.general.package_facts
+
+    Validate custom role:
+
+ansible-playbook -i inventory.ini custom_collection/playbooks/deploy-webapp.yml --syntax-check
+
+Conclusion
+
+Congratulations! You have successfully completed Lab 6: Working with Content Collections. In this lab, you have accomplished the following:
+
+Key Achievements:
+
+• Mastered Collection Management: You learned how to search, install, and manage Ansible Content Collections from Ansible Galaxy, including version-specific installations and requirements files.
+
+• Explored Collection Structure: You gained hands-on experience navigating collection directories, understanding their organization, and identifying available modules and roles.
+
+• Implemented Collection-Based Automation: You created and executed playbooks that leverage modules from multiple collections, including community.general, community.crypto, and ansible.posix.
+
+• Advanced Collection Usage: You demonstrated complex automation scenarios using collection modules for system administration, security hardening, SSL certificate management, and web service deployment.
+
+• Custom Collection Development: You learned how to organize your own automation content in a collection-like structure, creating reusable roles and playbooks.
+
+• Troubleshooting Skills: You developed the ability to diagnose and resolve common collection-related issues, including installation problems, module conflicts, and version management.
+
+Why This Matters:
+
+Content Collections represent the modern approach to Ansible automation, providing:
+
+    Modular Organization: Collections package related modules, roles, and plugins together
+    Version Control: Independent versioning allows for better dependency management
+    Community Contributions: Access to thousands of community-maintained automation components
+    Enterprise Support: Red Hat Certified Collections provide enterprise-grade automation content
+    Scalability: Collections enable large-scale automation projects with better organization
+
+Real-World Applications:
+
+The skills you've developed in this lab are directly applicable to:
+
+    Infrastructure Automation: Using certified collections for cloud providers, network devices, and storage systems
+    Security Compliance: Implementing security hardening using specialized security collections
+    Application Deployment: Leveraging application-specific collections for database, web server, and middleware automation
+    DevOps Integration: Incorporating collections into CI/CD pipelines for consistent automation practices
+
+You are now equipped to leverage the full power of Ansible Content Collections in your automation projects, making your playbooks more maintainable, reusable, and aligned with industry best practices.

@@ -1,0 +1,516 @@
+Lab 12: Creating and Using Smart Inventories
+Objectives
+
+By the end of this lab, you will be able to:
+
+• Understand the concept and benefits of smart inventories in Ansible Automation Platform • Create and configure smart inventories using dynamic filters • Implement smart inventory filters based on host facts and variables • Use smart inventories to target specific systems for automated configuration • Apply smart inventories in real-world scenarios for dynamic environment management • Troubleshoot common smart inventory configuration issues
+Prerequisites
+
+Before starting this lab, you should have:
+
+• Basic understanding of Ansible concepts (playbooks, inventories, hosts) • Familiarity with YAML syntax and structure • Knowledge of Linux command line operations • Understanding of Ansible Automation Platform/AWX interface • Completed previous labs covering basic inventory management • Access to multiple Linux systems with different characteristics (OS versions, installed packages, etc.)
+Lab Environment Setup
+
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment - no need to build your own virtual machines or configure complex networking.
+
+Your lab environment includes: • One Ansible Automation Platform/AWX controller node • Multiple managed nodes with varying configurations • Pre-installed Ansible collections and dependencies • Network connectivity between all systems
+Understanding Smart Inventories
+
+Smart Inventories are dynamic inventory sources that automatically populate based on defined criteria or filters. Unlike static inventories where you manually define hosts, smart inventories use host facts, variables, and other attributes to dynamically include or exclude systems.
+Key Benefits:
+
+• Dynamic Host Selection: Automatically include hosts based on current system state • Reduced Maintenance: No manual inventory updates when systems change • Flexible Targeting: Create multiple views of the same infrastructure • Scalability: Handle large, changing environments efficiently
+Task 1: Setting Up the Foundation
+Subtask 1.1: Access Your Lab Environment
+
+    Click Start Lab to access your Al Nafi cloud environment
+    Open a web browser and navigate to your AWX/Automation Controller interface
+    Log in using the provided credentials
+
+# Default login credentials (provided in your lab environment)
+Username: admin
+Password: [provided in lab environment]
+
+Subtask 1.2: Verify Existing Inventory
+
+    Navigate to Resources → Inventories in the AWX interface
+    Locate the existing Lab Inventory that contains your managed hosts
+    Click on Lab Inventory to view the hosts
+    Note the different characteristics of your hosts (OS versions, installed packages, etc.)
+
+Subtask 1.3: Gather Host Facts
+
+Before creating smart inventories, we need to collect facts from all managed hosts.
+
+    Navigate to Resources → Templates
+
+    Create a new Job Template with the following settings:
+        Name: Gather Facts Template
+        Job Type: Run
+        Inventory: Lab Inventory
+        Project: Demo Project (or create a new one)
+        Playbook: Create a fact-gathering playbook
+
+    Create the fact-gathering playbook:
+
+---
+- name: Gather and Display Host Facts
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Display OS information
+      debug:
+        msg: |
+          Hostname: {{ inventory_hostname }}
+          OS Family: {{ ansible_os_family }}
+          OS Distribution: {{ ansible_distribution }}
+          OS Version: {{ ansible_distribution_version }}
+          Architecture: {{ ansible_architecture }}
+          Memory: {{ ansible_memtotal_mb }}MB
+          
+    - name: Set custom facts for smart inventory filtering
+      set_fact:
+        server_role: "{{ 'web' if 'web' in inventory_hostname else 'database' if 'db' in inventory_hostname else 'general' }}"
+        environment_type: "{{ 'production' if 'prod' in inventory_hostname else 'development' if 'dev' in inventory_hostname else 'testing' }}"
+        
+    - name: Save custom facts
+      copy:
+        content: |
+          server_role: {{ server_role }}
+          environment_type: {{ environment_type }}
+        dest: /tmp/custom_facts.yml
+
+    Run the job template to gather facts from all hosts
+
+Task 2: Creating Your First Smart Inventory
+Subtask 2.1: Create a Basic Smart Inventory
+
+    Navigate to Resources → Inventories
+    Click the + button to create a new inventory
+    Select Smart Inventory from the dropdown
+    Configure the smart inventory:
+
+Name: Linux Servers Smart Inventory
+Description: Dynamic inventory for all Linux servers
+Organization: Default
+
+Subtask 2.2: Configure Smart Inventory Filters
+
+Smart inventories use host filters to determine which hosts to include. The filter syntax uses a search query format.
+
+    In the Host Filter field, enter:
+
+ansible_os_family:Linux
+
+    Click Save
+    Navigate to the Hosts tab to see the dynamically populated hosts
+
+Subtask 2.3: Test the Smart Inventory
+
+    Create a simple test playbook to verify the smart inventory works:
+
+---
+- name: Test Smart Inventory
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Display host information
+      debug:
+        msg: "This is {{ inventory_hostname }} running {{ ansible_distribution }} {{ ansible_distribution_version }}"
+        
+    - name: Create test file
+      file:
+        path: /tmp/smart_inventory_test.txt
+        state: touch
+        mode: '0644'
+
+    Create a job template using the smart inventory
+    Run the job to confirm it targets the correct hosts
+
+Task 3: Advanced Smart Inventory Filtering
+Subtask 3.1: Create Environment-Based Smart Inventories
+
+Create smart inventories for different environments:
+
+    Production Smart Inventory:
+        Name: Production Servers
+        Host Filter: name:prod or environment_type:production
+
+    Development Smart Inventory:
+        Name: Development Servers
+        Host Filter: name:dev or environment_type:development
+
+    Web Servers Smart Inventory:
+        Name: Web Servers
+        Host Filter: server_role:web or name:web
+
+Subtask 3.2: Create Resource-Based Smart Inventories
+
+Create smart inventories based on system resources:
+
+    High Memory Servers:
+        Name: High Memory Servers
+        Host Filter: ansible_memtotal_mb:>=4096
+
+    CentOS Servers:
+        Name: CentOS Servers
+        Host Filter: ansible_distribution:CentOS
+
+    Ubuntu Servers:
+        Name: Ubuntu Servers
+        Host Filter: ansible_distribution:Ubuntu
+
+Subtask 3.3: Complex Filter Examples
+
+Create more sophisticated filters using logical operators:
+
+# Multiple conditions with AND
+ansible_os_family:RedHat and ansible_memtotal_mb:>=2048
+
+# Multiple conditions with OR
+ansible_distribution:Ubuntu or ansible_distribution:Debian
+
+# Exclusion filters
+ansible_os_family:Linux and not name:test
+
+# Range filters
+ansible_memtotal_mb:>=1024 and ansible_memtotal_mb:<=8192
+
+# Pattern matching
+name:web* or name:*prod*
+
+Task 4: Using Smart Inventories for Configuration Management
+Subtask 4.1: Create Role-Specific Configurations
+
+Create playbooks that leverage smart inventories for targeted configuration:
+
+    Web Server Configuration Playbook:
+
+---
+- name: Configure Web Servers
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install web server packages
+      package:
+        name:
+          - httpd
+          - mod_ssl
+        state: present
+      when: ansible_os_family == "RedHat"
+      
+    - name: Install web server packages (Ubuntu/Debian)
+      package:
+        name:
+          - apache2
+          - apache2-utils
+        state: present
+      when: ansible_os_family == "Debian"
+      
+    - name: Start and enable web service
+      service:
+        name: "{{ 'httpd' if ansible_os_family == 'RedHat' else 'apache2' }}"
+        state: started
+        enabled: yes
+        
+    - name: Create web content
+      copy:
+        content: |
+          <html>
+          <head><title>{{ inventory_hostname }}</title></head>
+          <body>
+          <h1>Web Server: {{ inventory_hostname }}</h1>
+          <p>OS: {{ ansible_distribution }} {{ ansible_distribution_version }}</p>
+          <p>Role: {{ server_role | default('web') }}</p>
+          <p>Environment: {{ environment_type | default('unknown') }}</p>
+          </body>
+          </html>
+        dest: /var/www/html/index.html
+        mode: '0644'
+
+    Database Server Configuration Playbook:
+
+---
+- name: Configure Database Servers
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install database packages
+      package:
+        name:
+          - mariadb-server
+          - mariadb
+        state: present
+      when: ansible_os_family == "RedHat"
+      
+    - name: Install database packages (Ubuntu/Debian)
+      package:
+        name:
+          - mariadb-server
+          - mariadb-client
+        state: present
+      when: ansible_os_family == "Debian"
+      
+    - name: Start and enable database service
+      service:
+        name: mariadb
+        state: started
+        enabled: yes
+        
+    - name: Create database configuration
+      copy:
+        content: |
+          [mysqld]
+          bind-address = 0.0.0.0
+          max_connections = 100
+          # Server: {{ inventory_hostname }}
+          # Environment: {{ environment_type | default('unknown') }}
+        dest: /etc/mysql/conf.d/custom.cnf
+        mode: '0644'
+      notify: restart mariadb
+      
+  handlers:
+    - name: restart mariadb
+      service:
+        name: mariadb
+        state: restarted
+
+Subtask 4.2: Create Environment-Specific Job Templates
+
+    Create job templates for each smart inventory:
+        Web Server Deployment (uses Web Servers smart inventory)
+        Database Configuration (uses Database Servers smart inventory)
+        Production Updates (uses Production Servers smart inventory)
+        Development Testing (uses Development Servers smart inventory)
+
+    Configure each template with appropriate credentials and settings
+
+Subtask 4.3: Test Targeted Deployments
+
+    Run the web server configuration job template
+    Verify it only targets hosts in the Web Servers smart inventory
+    Run the database configuration job template
+    Confirm it only affects database servers
+
+Task 5: Dynamic Smart Inventory Updates
+Subtask 5.1: Create a Host Modification Playbook
+
+Create a playbook that changes host characteristics to test smart inventory dynamics:
+
+---
+- name: Modify Host Characteristics
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install additional packages based on hostname
+      package:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - htop
+        - vim
+        - curl
+      when: "'web' in inventory_hostname"
+      
+    - name: Set new custom facts
+      copy:
+        content: |
+          server_role: {{ 'web' if 'web' in inventory_hostname else 'database' if 'db' in inventory_hostname else 'application' }}
+          environment_type: {{ 'production' if 'prod' in inventory_hostname else 'staging' if 'stage' in inventory_hostname else 'development' }}
+          last_updated: "{{ ansible_date_time.iso8601 }}"
+          packages_installed: "{{ ansible_pkg_mgr }}"
+        dest: /etc/ansible/facts.d/custom.fact
+        mode: '0644'
+      
+    - name: Reload ansible facts
+      setup:
+
+Subtask 5.2: Test Smart Inventory Updates
+
+    Run the host modification playbook
+    Navigate to your smart inventories
+    Click Sync or wait for automatic synchronization
+    Verify that host membership in smart inventories updates based on new characteristics
+
+Subtask 5.3: Create Time-Based Smart Inventories
+
+Create smart inventories that change based on time or other dynamic factors:
+
+# Recently Updated Hosts
+last_updated:>=2024-01-01
+
+# Hosts with specific packages
+packages_installed:yum or packages_installed:apt
+
+# Combined complex filter
+ansible_memtotal_mb:>=2048 and last_updated:>=2024-01-01 and server_role:web
+
+Task 6: Monitoring and Troubleshooting Smart Inventories
+Subtask 6.1: Monitor Smart Inventory Performance
+
+    Navigate to Views → Jobs to monitor smart inventory sync jobs
+    Check sync frequency and duration
+    Review any sync errors or warnings
+
+Subtask 6.2: Debug Smart Inventory Filters
+
+Create a debugging playbook to understand why hosts are or aren't included:
+
+---
+- name: Debug Smart Inventory Inclusion
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Display all relevant facts for smart inventory filtering
+      debug:
+        msg: |
+          Hostname: {{ inventory_hostname }}
+          OS Family: {{ ansible_os_family }}
+          Distribution: {{ ansible_distribution }}
+          Memory: {{ ansible_memtotal_mb }}MB
+          Custom Role: {{ server_role | default('undefined') }}
+          Environment: {{ environment_type | default('undefined') }}
+          
+    - name: Check if host matches web server criteria
+      debug:
+        msg: "This host {{ 'MATCHES' if ('web' in inventory_hostname or server_role == 'web') else 'DOES NOT MATCH' }} web server criteria"
+        
+    - name: Check if host matches production criteria
+      debug:
+        msg: "This host {{ 'MATCHES' if ('prod' in inventory_hostname or environment_type == 'production') else 'DOES NOT MATCH' }} production criteria"
+
+Subtask 6.3: Common Troubleshooting Steps
+
+    Verify Filter Syntax:
+        Check for typos in field names
+        Ensure proper operator usage
+        Validate logical operator precedence
+
+    Check Host Facts:
+        Confirm required facts are gathered
+        Verify custom facts are properly set
+        Ensure fact gathering is enabled
+
+    Test Filter Logic:
+        Start with simple filters and add complexity
+        Use the debug playbook to understand host characteristics
+        Test filters with known hosts first
+
+Advanced Smart Inventory Scenarios
+Scenario 1: Patch Management Smart Inventory
+
+Create smart inventories for patch management:
+
+# Critical Systems (high memory, production)
+ansible_memtotal_mb:>=4096 and environment_type:production
+
+# Non-Critical Systems (development and testing)
+environment_type:development or environment_type:testing
+
+# Windows Systems (if applicable)
+ansible_os_family:Windows
+
+# Recently Patched Systems
+last_patched:>=2024-01-01
+
+Scenario 2: Compliance-Based Smart Inventories
+
+# PCI Compliance Scope
+server_role:web and environment_type:production
+
+# HIPAA Compliance Scope  
+server_role:database and compliance_required:hipaa
+
+# Security Hardened Systems
+security_baseline:applied and last_audit_passed:true
+
+Scenario 3: Geographic Smart Inventories
+
+# East Coast Servers
+datacenter:east or region:us-east-1
+
+# West Coast Servers
+datacenter:west or region:us-west-1
+
+# International Servers
+region:eu-west-1 or region:ap-southeast-1
+
+Best Practices for Smart Inventories
+Performance Optimization
+
+    Efficient Filters: Use specific filters to reduce processing time
+    Fact Caching: Enable fact caching to improve sync performance
+    Sync Scheduling: Schedule syncs during low-usage periods
+    Filter Complexity: Balance filter sophistication with performance
+
+Maintenance Guidelines
+
+    Regular Review: Periodically review and update filter criteria
+    Documentation: Document filter logic and intended use cases
+    Testing: Test filters in development before production use
+    Monitoring: Monitor sync success rates and performance metrics
+
+Security Considerations
+
+    Access Control: Limit smart inventory access to authorized users
+    Sensitive Data: Avoid exposing sensitive information in filters
+    Audit Trail: Monitor smart inventory usage and changes
+    Least Privilege: Grant minimum necessary permissions
+
+Troubleshooting Common Issues
+Issue 1: Hosts Not Appearing in Smart Inventory
+
+Symptoms: Expected hosts don't appear in smart inventory
+
+Solutions:
+
+    Verify host facts are gathered and current
+    Check filter syntax for typos or logical errors
+    Ensure custom facts are properly formatted
+    Test filter components individually
+
+Issue 2: Smart Inventory Sync Failures
+
+Symptoms: Smart inventory sync jobs fail or timeout
+
+Solutions:
+
+    Check system resources and performance
+    Simplify complex filters
+    Verify database connectivity
+    Review error logs for specific issues
+
+Issue 3: Unexpected Host Inclusion/Exclusion
+
+Symptoms: Hosts appear in wrong smart inventories
+
+Solutions:
+
+    Use debug playbook to verify host characteristics
+    Review filter logic and operator precedence
+    Check for conflicting or overlapping filters
+    Validate custom fact values
+
+Conclusion
+
+In this lab, you have successfully:
+
+• Mastered Smart Inventory Concepts: Learned how smart inventories provide dynamic, automated host grouping based on system characteristics and custom criteria
+
+• Created Multiple Smart Inventory Types: Built various smart inventories including environment-based, role-based, and resource-based groupings that automatically adapt to infrastructure changes
+
+• Implemented Advanced Filtering: Developed sophisticated filter expressions using logical operators, pattern matching, and complex criteria to precisely target specific host groups
+
+• Applied Smart Inventories Practically: Used smart inventories to deploy targeted configurations, demonstrating how they streamline operations in dynamic environments
+
+• Developed Troubleshooting Skills: Learned to debug smart inventory issues, optimize performance, and maintain reliable dynamic inventory systems
+
+Why This Matters: Smart inventories are crucial for managing modern, dynamic infrastructure where manual inventory maintenance becomes impractical. They enable:
+
+    Automated Scaling: Infrastructure changes are automatically reflected in inventory groupings
+    Reduced Errors: Eliminate manual inventory update mistakes
+    Improved Efficiency: Target specific systems without manual host selection
+    Enhanced Compliance: Automatically group systems requiring specific compliance measures
+    Operational Agility: Quickly adapt to changing business requirements and infrastructure needs
+
+These skills are essential for advanced Ansible automation in enterprise environments, where infrastructure complexity and scale demand intelligent, automated inventory management solutions. Smart inventories form the foundation for sophisticated automation workflows that can adapt to changing conditions without manual intervention.

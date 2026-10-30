@@ -1,0 +1,20 @@
+---
+# =============================================================================
+# Web Server Role - Default Variables
+# =============================================================================
+# Role: webserver
+# File: defaults/main.yml
+# Purpose: Sensible defaults for the role. Override in group_vars, host_vars,
+#          or playbook vars as needed.
+# =============================================================================
+
+# Local sandbox document root used by tasks/main.yml
+webserver_document_root: "/tmp/ansible-doc-lab/role-www"
+
+# Reference-only service name (not started by this role)
+webserver_service_name: "apache2"
+
+# Standard ports documented for future expansion of this role
+webserver_ports:
+  http: 80
+  https: 443

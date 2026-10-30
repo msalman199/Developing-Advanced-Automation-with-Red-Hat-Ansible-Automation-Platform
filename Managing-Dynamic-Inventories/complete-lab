@@ -1,0 +1,370 @@
+Lab 11: Managing Dynamic Inventories
+Objectives
+
+By the end of this lab, students will be able to:
+
+    Understand the concept and benefits of dynamic inventories in Ansible compared to static inventories
+    Configure and test a dynamic inventory source using the Ansible aws_ec2 inventory plugin
+    Create and execute Ansible playbooks that consume dynamic inventory data
+    Troubleshoot common dynamic inventory configuration issues using a diagnostic script
+    Apply dynamic inventory concepts to a new, independent scenario
+
+Prerequisites
+
+Before starting this lab, students should have:
+
+    Basic understanding of Ansible fundamentals (playbooks, inventory, modules)
+    Familiarity with AWS services (EC2, IAM) - a sandbox or lab AWS account is sufficient
+    Knowledge of YAML syntax and JSON data structures
+    Experience with Linux command line operations
+    Completion of previous Ansible labs or equivalent experience
+
+Required software (install if not already present in your lab environment):
+
+python3 -m pip install --user boto3 botocore
+ansible-galaxy collection install amazon.aws
+
+Verify the collection installed correctly:
+
+ansible-doc -t inventory -l | grep aws_ec2
+
+Expected output: a line similar to amazon.aws.aws_ec2 followed by a short description.
+
+This lab is performed entirely in an isolated, self-owned practice environment (an Al Nafi cloud machine or your own sandbox AWS account) for defensive, educational purposes: understanding how dynamic inventories work helps you correctly configure, audit, and secure automation pipelines that manage cloud infrastructure.
+Lab Environment Setup
+
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment. No need to build your own VM or install additional software beyond the Python packages and collection listed above.
+
+Your lab environment includes:
+
+    Ansible control node with a recent Ansible version
+    AWS CLI pre-configured (or configurable with your own sandbox credentials)
+    Python 3 with pip available
+
+If your environment does not have live AWS credentials, you can still complete every task: the aws_ec2 inventory plugin and playbooks will simply return zero hosts, and the troubleshooting script is specifically designed to help you diagnose that situation.
+Task 1: Understanding Static vs Dynamic Inventory
+Subtask 1.1: Review a Static Inventory
+
+Static inventories are fixed text files that must be manually updated whenever infrastructure changes. Dynamic inventories query a live source (a cloud API, a database, a CMDB) at run time and always reflect current state.
+
+    Create a working directory and a sample static inventory:
+
+mkdir -p ~/lab11
+cd ~/lab11
+cat > static_inventory << 'EOF'
+[webservers]
+web1.example.com ansible_host=10.0.1.10
+web2.example.com ansible_host=10.0.1.11
+
+[databases]
+db1.example.com ansible_host=10.0.2.10
+
+[production:children]
+webservers
+databases
+EOF
+
+    List the static inventory:
+
+ansible-inventory -i static_inventory --list
+
+Deliverable / expected result: The command prints a JSON structure containing webservers, databases, and production groups, each listing the hardcoded hostnames above. This confirms you understand the baseline format that dynamic inventories replace.
+Subtask 1.2: Verify AWS Access for Dynamic Inventory
+
+    Check AWS CLI and credentials:
+
+aws --version
+aws configure list
+
+    Confirm boto3 is importable:
+
+python3 -c "import boto3; print('boto3 version:', boto3.__version__)"
+
+Deliverable / expected result: aws --version prints a version string (for example aws-cli/2.x), and the Python check prints boto3 version: <x.y.z> with no ImportError. If aws configure list shows no access key, note this - Task 2 will still work but will return an empty host list.
+Task 2: Configuring and Testing the AWS Dynamic Inventory
+Subtask 2.1: Create the Dynamic Inventory Configuration
+
+    Create the inventory directory:
+
+mkdir -p ~/lab11/inventory
+cd ~/lab11
+
+    Create the aws_ec2 plugin configuration file. The file name must end in aws_ec2.yml or aws_ec2.yaml so Ansible recognizes it as this plugin's config.
+
+cat > inventory/aws_ec2.yml << 'EOF'
+---
+plugin: amazon.aws.aws_ec2
+regions:
+  - us-east-1
+filters:
+  instance-state-name: running
+keyed_groups:
+  - prefix: tag
+    key: tags
+  - prefix: instance_type
+    key: instance_type
+  - prefix: az
+    key: placement.availability_zone
+groups:
+  webservers: "'web' in (tags.Name | default(''))"
+  databases: "'db' in (tags.Name | default(''))"
+compose:
+  ansible_host: public_ip_address | default(private_ip_address)
+  ec2_state: instance_state_name
+  ec2_instance_type: instance_type
+  ec2_az: placement.availability_zone
+EOF
+
+    Validate the YAML and plugin recognition:
+
+ansible-inventory -i inventory/aws_ec2.yml --list
+
+Deliverable / expected result: The command returns valid JSON. If AWS credentials are configured and running EC2 instances exist in us-east-1, you will see a _meta.hostvars section populated with instance data. If no instances exist (or no credentials are configured), you will see an empty or near-empty JSON structure like {"_meta": {"hostvars": {}}, "all": {"children": ["ungrouped"]}} with no error about "unable to parse" - this is a valid, working configuration correctly reporting zero matching hosts.
+Subtask 2.2: View Inventory as a Group Tree
+
+ansible-inventory -i inventory/aws_ec2.yml --graph
+
+Deliverable / expected result: A tree view starting with @all: and showing child groups such as @webservers, @databases, @ungrouped, and any tag_*, instance_type_*, or az_* groups generated by keyed_groups. If zero instances were discovered, the tree still prints with empty group branches - this confirms the plugin loaded and evaluated correctly.
+Task 3: Running Playbooks Against a Dynamic Inventory
+Subtask 3.1: Gather and Review System Information
+
+    Create the playbooks directory:
+
+mkdir -p ~/lab11/playbooks
+
+    Create the system information playbook:
+
+cat > ~/lab11/playbooks/gather_system_info.yml << 'EOF'
+---
+- name: Gather System Information from Dynamic Inventory
+  hosts: all
+  gather_facts: yes
+  vars:
+    output_dir: "/tmp/system_reports"
+
+  tasks:
+    - name: Create output directory
+      file:
+        path: "{{ output_dir }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      run_once: true
+
+    - name: Display basic system information
+      debug:
+        msg: |
+          Host: {{ inventory_hostname }}
+          OS: {{ ansible_distribution | default('N/A') }} {{ ansible_distribution_version | default('') }}
+          IP Address: {{ ansible_default_ipv4.address | default('N/A') }}
+
+    - name: Create system report
+      copy:
+        content: |
+          System Report for {{ inventory_hostname }}
+          =====================================
+          Hostname: {{ ansible_hostname | default('N/A') }}
+          Operating System: {{ ansible_distribution | default('N/A') }} {{ ansible_distribution_version | default('') }}
+          Instance Type: {{ ec2_instance_type | default('N/A') }}
+          Availability Zone: {{ ec2_az | default('N/A') }}
+          State: {{ ec2_state | default('N/A') }}
+        dest: "{{ output_dir }}/{{ inventory_hostname }}_report.txt"
+      delegate_to: localhost
+EOF
+
+    Run the playbook against the dynamic inventory:
+
+cd ~/lab11
+ansible-playbook -i inventory/aws_ec2.yml playbooks/gather_system_info.yml
+
+Deliverable / expected result: Ansible connects to each discovered host (or reports PLAY RECAP with zero hosts processed if none were discovered) and, for each host it reaches, writes a report file. If you have no live EC2 instances, add a local test target so you can verify the playbook logic end to end:
+
+ansible-playbook -i localhost, -c local playbooks/gather_system_info.yml
+
+    Review the generated reports:
+
+ls -l /tmp/system_reports/
+cat /tmp/system_reports/*.txt
+
+Deliverable / expected result: At least one file named <hostname>_report.txt exists in /tmp/system_reports/, and cat displays its contents showing the hostname, OS fields, and EC2 metadata (or N/A for fields that do not apply to a local test host).
+Subtask 3.2: Create a Group-Specific Playbook
+
+    Create a web server check playbook that targets only the webservers group:
+
+cat > ~/lab11/playbooks/check_webservers.yml << 'EOF'
+---
+- name: Check Web Servers from Dynamic Inventory
+  hosts: webservers
+  gather_facts: no
+
+  tasks:
+    - name: Report group membership and EC2 metadata
+      debug:
+        msg: |
+          Host {{ inventory_hostname }} is in groups: {{ group_names | join(', ') }}
+          Instance Type: {{ ec2_instance_type | default('N/A') }}
+          Availability Zone: {{ ec2_az | default('N/A') }}
+EOF
+
+    Run it in check mode against the dynamic inventory:
+
+ansible-playbook -i inventory/aws_ec2.yml playbooks/check_webservers.yml --check
+
+Deliverable / expected result: If your AWS account has instances tagged with Name containing web, the play runs against them and prints their group membership and EC2 metadata. If the webservers group is empty, Ansible reports skipping: no hosts matched for the play, which is the correct and expected behavior for an empty dynamic group.
+Subtask 3.3: Build and Run a Combined Deployment Playbook
+
+    Create a playbook that imports both playbooks in sequence and adds a verification step:
+
+cat > ~/lab11/playbooks/full_deployment.yml << 'EOF'
+---
+- import_playbook: gather_system_info.yml
+- import_playbook: check_webservers.yml
+
+- name: Post-run verification
+  hosts: all
+  gather_facts: no
+
+  tasks:
+    - name: Confirm report file exists for this host
+      stat:
+        path: "/tmp/system_reports/{{ inventory_hostname }}_report.txt"
+      register: report_file
+      delegate_to: localhost
+
+    - name: Display verification result
+      debug:
+        msg: >-
+          Report for {{ inventory_hostname }} exists: {{ report_file.stat.exists }}
+EOF
+
+    Run the full deployment playbook and observe each phase execute in order:
+
+ansible-playbook -i inventory/aws_ec2.yml playbooks/full_deployment.yml
+
+Deliverable / expected result: The output shows three distinct PLAY sections in sequence (system info gathering, web server check, post-run verification), each with its own PLAY RECAP. In the final play, the Display verification result task prints Report for <hostname> exists: True for every host that was processed in the first play. If you are testing without live EC2 hosts, run the same command against a local target to confirm the full workflow logic:
+
+ansible-playbook -i localhost, -c local playbooks/full_deployment.yml
+
+Task 4: Troubleshooting Dynamic Inventory Configurations
+Subtask 4.1: Create a Diagnostic Script
+
+    Create the troubleshooting script:
+
+cat > ~/lab11/troubleshoot_inventory.sh << 'EOF'
+#!/bin/bash
+
+echo "Dynamic Inventory Troubleshooting Script"
+echo "========================================"
+echo
+
+echo "1. Checking AWS CLI Configuration:"
+echo "   AWS CLI Version: $(aws --version 2>&1)"
+echo "   AWS Region: $(aws configure get region 2>/dev/null || echo 'Not configured')"
+echo
+
+echo "2. Checking AWS Credentials:"
+if aws sts get-caller-identity >/dev/null 2>&1; then
+    echo "   OK: AWS credentials are valid"
+    aws sts get-caller-identity --query 'Account' --output text | sed 's/^/   Account: /'
+else
+    echo "   FAIL: AWS credentials are invalid or not configured"
+fi
+echo
+
+echo "3. Checking Python Dependencies:"
+python3 -c "import boto3; print('   OK: boto3 version', boto3.__version__)" 2>/dev/null || echo "   FAIL: boto3 not installed"
+python3 -c "import botocore; print('   OK: botocore version', botocore.__version__)" 2>/dev/null || echo "   FAIL: botocore not installed"
+echo
+
+echo "4. Checking Ansible Configuration:"
+echo "   Ansible Version: $(ansible --version | head -1)"
+plugin_count=$(ansible-doc -t inventory -l 2>/dev/null | grep -c aws_ec2)
+echo "   aws_ec2 plugin registered: ${plugin_count} match(es) found"
+echo
+
+echo "5. Testing Inventory File:"
+if [ -f "inventory/aws_ec2.yml" ]; then
+    echo "   Testing inventory/aws_ec2.yml..."
+    if ansible-inventory -i inventory/aws_ec2.yml --list >/tmp/inv_test_output.json 2>/tmp/inv_test_error.log; then
+        echo "   OK: inventory parsed successfully"
+        host_count=$(python3 -c "import json; d=json.load(open('/tmp/inv_test_output.json')); print(len(d.get('_meta', {}).get('hostvars', {})))")
+        echo "   Hosts discovered: ${host_count}"
+    else
+        echo "   FAIL: inventory parsing failed"
+        echo "   Error details:"
+        sed 's/^/     /' /tmp/inv_test_error.log
+    fi
+else
+    echo "   FAIL: inventory/aws_ec2.yml not found in current directory"
+fi
+echo
+
+echo "6. Checking EC2 Instance Visibility:"
+if aws ec2 describe-instances --query 'Reservations[*].Instances[*].InstanceId' --output text >/tmp/ec2_ids.txt 2>/tmp/ec2_error.log; then
+    total=$(wc -w < /tmp/ec2_ids.txt)
+    running=$(aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" --query 'Reservations[*].Instances[*].InstanceId' --output text | wc -w)
+    echo "   OK: can query EC2 instances"
+    echo "   Total instances visible: ${total}"
+    echo "   Running instances: ${running}"
+else
+    echo "   FAIL: cannot query EC2 instances"
+    sed 's/^/     /' /tmp/ec2_error.log
+fi
+echo
+
+echo "Troubleshooting complete."
+echo "If issues persist, check:"
+echo "- AWS IAM permissions (ec2:DescribeInstances read access required)"
+echo "- That the inventory file name ends in aws_ec2.yml or aws_ec2.yaml"
+echo "- Network connectivity from the control node to AWS endpoints"
+echo "- Collection installed: ansible-galaxy collection install amazon.aws"
+EOF
+
+    Make it executable and run it:
+
+chmod +x ~/lab11/troubleshoot_inventory.sh
+cd ~/lab11
+./troubleshoot_inventory.sh
+
+Deliverable / expected result: The script prints six numbered diagnostic sections, each ending in an OK: or FAIL: line. Review your output line by line: every FAIL: line identifies exactly one configuration gap (missing credentials, missing package, wrong file name, or missing IAM permission) that you can resolve before rerunning Task 2 and Task 3.
+Subtask 4.2: Apply the Script to Diagnose an Intentional Misconfiguration
+
+    Deliberately break the inventory file name (a common real-world mistake) and observe the effect:
+
+cp inventory/aws_ec2.yml inventory/aws_ec2_broken.txt
+./troubleshoot_inventory.sh
+
+Deliverable / expected result: Section 5 of the script output still reports on inventory/aws_ec2.yml (unaffected), demonstrating that the script checks a specific expected filename. Now manually confirm the broken file is invisible to Ansible:
+
+ansible-inventory -i inventory/aws_ec2_broken.txt --list
+
+This produces an error similar to Unable to parse .../aws_ec2_broken.txt as an inventory source, because the plugin is matched by file suffix (aws_ec2.yml / aws_ec2.yaml). Clean up afterward:
+
+rm inventory/aws_ec2_broken.txt
+
+This exercise demonstrates the single most common dynamic inventory failure mode: a correctly written plugin configuration that Ansible silently ignores because the file name does not match the plugin's required suffix pattern.
+Challenge Exercise (Optional)
+
+Apply what you have learned to a new scenario not covered above:
+
+    Create a new dynamic inventory file inventory/aws_ec2_challenge.yml that only discovers instances tagged Environment: dev (hint: use the filters key with tag:Environment as the filter name, or a groups entry with a Jinja2 condition on tags.Environment).
+    Add a keyed_groups entry that groups hosts by tags.Project instead of by tags.Name.
+    Run ansible-inventory -i inventory/aws_ec2_challenge.yml --graph and confirm the group structure reflects your new grouping logic.
+    Run ./troubleshoot_inventory.sh against this new file by temporarily copying it over inventory/aws_ec2.yml, and confirm section 5 reports it as successfully parsed.
+
+There is no single correct file for this exercise; success is measured by whether your configuration parses without error and produces the grouping behavior you intended.
+Expected Outcomes
+
+    A working aws_ec2.yml dynamic inventory configuration that parses successfully and reflects live (or empty) AWS EC2 state
+    Executed playbooks that consume dynamic inventory group membership and per-host EC2 metadata, with generated report files reviewed in /tmp/system_reports
+    A reusable troubleshooting script that diagnoses AWS credentials, Python dependencies, plugin registration, file naming, and IAM permission issues
+
+Troubleshooting
+
+    Symptom: ansible-inventory -i inventory/aws_ec2.yml --list returns an "Unable to parse" or "no inventory was parsed" error. Diagnostic hint: Check that the file name ends exactly in aws_ec2.yml or aws_ec2.yaml, and that the plugin: key value is exactly amazon.aws.aws_ec2; run ansible-doc -t inventory -l | grep aws_ec2 to confirm the collection is installed.
+
+    Symptom: The inventory parses but returns zero hosts even though EC2 instances exist in the console. Diagnostic hint: Run aws sts get-caller-identity to confirm which account/credentials Ansible is using, verify the regions: list in the config matches where your instances actually run, and check that filters: instance-state-name: running is not excluding stopped instances you expected to see.
+
+Conclusion
+
+In this lab you configured and tested an AWS aws_ec2 dynamic inventory, compared it against a traditional static inventory, and ran playbooks that used dynamically discovered hosts and their EC2 metadata to generate and verify system reports. You built a multi-play deployment workflow with import_playbook and confirmed each phase executed and produced verifiable output, and you used a diagnostic script to systematically troubleshoot credential, dependency, and configuration-naming problems, including a deliberately broken file name to see a real failure mode firsthand. These skills translate directly to real-world automation work, where infrastructure changes constantly and static host lists quickly become stale or incorrect. As a next step, extend this lab by connecting the same inventory plugin to a second cloud provider's equivalent plugin (such as azure.azcollection.azure_rm or google.cloud.gcp_compute), or by integrating the generated system reports into a monitoring or configuration-management pipeline.

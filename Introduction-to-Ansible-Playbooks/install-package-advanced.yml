@@ -1,0 +1,53 @@
+---
+- name: Install packages using variables and loops
+  hosts: all
+  become: yes
+  vars:
+    packages_to_install:
+      - htop
+      - curl
+      - wget
+      - tree
+    
+  tasks:
+    - name: Update package cache (Ubuntu/Debian)
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+      
+    - name: Update package cache (CentOS/RHEL)
+      yum:
+        update_cache: yes
+      when: ansible_os_family == "RedHat"
+      
+    - name: Install packages on Ubuntu/Debian systems
+      apt:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ packages_to_install }}"
+      when: ansible_os_family == "Debian"
+      
+    - name: Install packages on CentOS/RHEL systems
+      yum:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ packages_to_install }}"
+      when: ansible_os_family == "RedHat"
+      
+    - name: Create a simple report file
+      copy:
+        content: |
+          Package Installation Report
+          ==========================
+          Date: {{ ansible_date_time.date }}
+          Time: {{ ansible_date_time.time }}
+          Host: {{ ansible_hostname }}
+          OS Family: {{ ansible_os_family }}
+          Packages Installed: {{ packages_to_install | join(', ') }}
+        dest: /tmp/installation_report.txt
+        mode: '0644'
+      
+    - name: Display installation summary
+      debug:
+        msg: "Successfully installed {{ packages_to_install | length }} packages on {{ ansible_hostname }}"

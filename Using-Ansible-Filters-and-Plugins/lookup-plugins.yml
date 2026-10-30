@@ -1,0 +1,31 @@
+---
+- name: Demonstrate Lookup Plugins
+  hosts: localhost
+  gather_facts: no
+
+  tasks:
+    - name: Read file content using file lookup
+      debug:
+        msg: "Hostname: {{ lookup('file', '/etc/hostname') | trim }}"
+      ignore_errors: yes
+
+    - name: Get environment variables
+      debug:
+        msg:
+          - "Home directory: {{ lookup('env', 'HOME') }}"
+          - "Current user: {{ lookup('env', 'USER') }}"
+
+    - name: Generate a random password
+      debug:
+        msg: "Random password: {{ lookup('password', '/tmp/ansible_lab_password length=12') }}"
+
+    - name: Use pipe lookup to run a command
+      debug:
+        msg: "Current date: {{ lookup('pipe', 'date') }}"
+
+    - name: Use template lookup
+      debug:
+        msg: "Templated message: {{ lookup('template', 'message.j2') }}"
+      vars:
+        username: "ansible_user"
+        server_name: "production"

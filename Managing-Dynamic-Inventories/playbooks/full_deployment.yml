@@ -1,0 +1,19 @@
+---
+- import_playbook: gather_system_info.yml
+- import_playbook: check_webservers.yml
+
+- name: Post-run verification
+  hosts: all
+  gather_facts: no
+
+  tasks:
+    - name: Confirm report file exists for this host
+      stat:
+        path: "/tmp/system_reports/{{ inventory_hostname }}_report.txt"
+      register: report_file
+      delegate_to: localhost
+
+    - name: Display verification result
+      debug:
+        msg: >-
+          Report for {{ inventory_hostname }} exists: {{ report_file.stat.exists }}

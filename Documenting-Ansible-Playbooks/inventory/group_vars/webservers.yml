@@ -1,0 +1,43 @@
+---
+# =============================================================================
+# Web Servers Group Variables
+# =============================================================================
+# Purpose: Configuration variables for all hosts in the webservers group.
+# Author: Infrastructure Automation Team (student exercise)
+# Dependencies: Consumed by playbooks/web-server-setup.yml
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Web Server Configuration
+# -----------------------------------------------------------------------------
+
+# Primary web service configuration.
+# NOTE: this lab does not install a real web server package; the service
+# name is documented here for reference only and is not started.
+web_service:
+  name: "apache2"                 # Service name (apache2 on Debian/Ubuntu, httpd on RHEL)
+  state: "stopped"                # Kept stopped in this lab - no package is installed
+  enabled: false                  # Not enabled at boot for this exercise
+
+# HTTP/HTTPS port configuration used by the sample playbook and templates
+ports:
+  http: 80                        # Standard HTTP port
+  https: 443                      # Standard HTTPS port
+
+# Document root and web content settings
+web_content:
+  document_root: "/tmp/ansible-doc-lab/www"   # Local sandbox directory, not a system path
+  index_file: "index.html"                    # Default index file name
+
+# -----------------------------------------------------------------------------
+# Security Configuration (documented for reference; not applied in this lab)
+# -----------------------------------------------------------------------------
+
+# Firewall rules that a production playbook would apply
+firewall_rules:
+  - port: "{{ ports.http }}"
+    protocol: "tcp"
+    comment: "Allow HTTP traffic"
+  - port: "{{ ports.https }}"
+    protocol: "tcp"
+    comment: "Allow HTTPS traffic"

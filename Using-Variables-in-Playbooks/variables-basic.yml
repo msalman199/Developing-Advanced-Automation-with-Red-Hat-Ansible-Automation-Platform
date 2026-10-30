@@ -1,0 +1,53 @@
+---
+- name: Basic Variables Demo
+  hosts: all
+  vars:
+    # Simple string variables
+    package_name: "httpd"
+    service_name: "httpd"
+    
+    # Numeric variables
+    port_number: 80
+    max_connections: 100
+    
+    # Boolean variables
+    enable_firewall: true
+    debug_mode: false
+    
+    # List variables
+    required_packages:
+      - httpd
+      - firewalld
+      - vim
+    
+    # Dictionary variables
+    web_config:
+      document_root: "/var/www/html"
+      server_admin: "admin@example.com"
+      timeout: 300
+  
+  tasks:
+    - name: Display string variable
+      debug:
+        msg: "Package to install: {{ package_name }}"
+    
+    - name: Display numeric variable
+      debug:
+        msg: "Port number: {{ port_number }}"
+    
+    - name: Display boolean variable
+      debug:
+        msg: "Firewall enabled: {{ enable_firewall }}"
+    
+    - name: Display list variable
+      debug:
+        msg: "Required packages: {{ required_packages }}"
+    
+    - name: Display dictionary variable
+      debug:
+        msg: "Document root: {{ web_config.document_root }}"
+    
+    - name: Loop through list variable
+      debug:
+        msg: "Installing package: {{ item }}"
+      loop: "{{ required_packages }}"

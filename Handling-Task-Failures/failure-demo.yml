@@ -1,0 +1,36 @@
+---
+- name: Demonstrate Task Failure Handling
+  hosts: webservers
+  become: yes
+  vars:
+    packages_to_install:
+      - httpd
+      - nonexistent-package
+      - curl
+    
+  tasks:
+    - name: Task 1 - This will succeed
+      debug:
+        msg: "Starting playbook execution on {{ inventory_hostname }}"
+    
+    - name: Task 2 - This might fail (network dependent)
+      uri:
+        url: "http://httpbin.org/delay/2"
+        timeout: 1
+      register: network_test
+    
+    - name: Task 3 - This will fail (invalid package)
+      package:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ packages_to_install }}"
+    
+    - name: Task 4 - This should not execute (due to previous failure)
+      debug:
+        msg: "If you see this message, error handling worked!"
+    
+    - name: Task 5 - Service start (will fail if package not installed)
+      service:
+        name: httpd
+        state: started
+        enabled: yes

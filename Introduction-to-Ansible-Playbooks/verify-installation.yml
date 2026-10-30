@@ -1,0 +1,36 @@
+---
+- name: Verify package installations
+  hosts: all
+  become: yes
+  vars:
+    expected_packages:
+      - htop
+      - curl
+      - wget
+      - tree
+      
+  tasks:
+    - name: Check if packages are installed (Ubuntu/Debian)
+      command: dpkg -l {{ item }}
+      register: package_check_deb
+      loop: "{{ expected_packages }}"
+      when: ansible_os_family == "Debian"
+      failed_when: package_check_deb.rc != 0
+      changed_when: false
+      
+    - name: Check if packages are installed (CentOS/RHEL)
+      command: rpm -q {{ item }}
+      register: package_check_rpm
+      loop: "{{ expected_packages }}"
+      when: ansible_os_family == "RedHat"
+      failed_when: package_check_rpm.rc != 0
+      changed_when: false
+      
+    - name: Verify htop functionality
+      command: htop --version
+      register: htop_version
+      changed_when: false
+      
+    - name: Display verification results
+      debug:
+        msg: "All packages verified successfully. htop version: {{ htop_version.stdout }}"

@@ -1,0 +1,548 @@
+Lab 3: Applying Idempotency in Playbooks
+Objectives
+
+By the end of this lab, students will be able to:
+
+    Understand the concept of idempotency in Ansible automation
+    Create playbooks with idempotent tasks that can be safely executed multiple times
+    Implement best practices for ensuring playbook idempotency
+    Verify idempotent behavior by running playbooks multiple times
+    Analyze task results to confirm no unintended side effects occur
+    Apply idempotency principles to common system administration tasks
+
+Prerequisites
+
+Before starting this lab, students should have:
+
+    Basic understanding of Ansible concepts (playbooks, tasks, modules)
+    Familiarity with YAML syntax
+    Experience with Linux command line operations
+    Knowledge of basic system administration tasks
+    Completion of introductory Ansible labs or equivalent experience
+    Understanding of SSH key-based authentication
+
+Lab Environment Setup
+
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment - no need to build your own virtual machines or configure complex networking.
+
+Your lab environment includes:
+
+    Control Node: CentOS/RHEL 8 with Ansible installed
+    Managed Nodes: Two target systems (node1 and node2) for testing
+    Pre-configured SSH connectivity between all nodes
+    All necessary tools and dependencies pre-installed
+
+Task 1: Understanding Idempotency Concepts
+Subtask 1.1: Connect to Your Lab Environment
+
+    Click Start Lab to access your cloud-based environment
+    Connect to the control node using the provided SSH credentials
+    Verify Ansible installation:
+
+ansible --version
+
+    Check connectivity to managed nodes:
+
+ansible all -m ping
+
+Subtask 1.2: Review Idempotency Principles
+
+Idempotency means that running the same operation multiple times produces the same result. In Ansible:
+
+    Tasks should check current state before making changes
+    Only necessary changes should be applied
+    Running a playbook multiple times should be safe
+    Results should be consistent and predictable
+
+Task 2: Creating Non-Idempotent vs Idempotent Tasks
+Subtask 2.1: Create a Non-Idempotent Example
+
+First, let's create a playbook that demonstrates non-idempotent behavior:
+
+    Create a directory for lab files:
+
+mkdir ~/ansible-idempotency-lab
+cd ~/ansible-idempotency-lab
+
+    Create a non-idempotent playbook:
+
+cat > non-idempotent.yml << 'EOF'
+---
+- name: Non-Idempotent Example
+  hosts: node1
+  become: yes
+  tasks:
+    - name: Add text to file (non-idempotent)
+      shell: echo "$(date): Playbook executed" >> /tmp/execution_log.txt
+      
+    - name: Create user with shell command (non-idempotent)
+      shell: useradd testuser1 || true
+      
+    - name: Install package with shell (non-idempotent)
+      shell: yum install -y tree
+EOF
+
+    Run the non-idempotent playbook:
+
+ansible-playbook non-idempotent.yml
+
+    Run it again and observe the results:
+
+ansible-playbook non-idempotent.yml
+
+    Check the execution log on the target node:
+
+ansible node1 -m shell -a "cat /tmp/execution_log.txt"
+
+Observation: Notice how the log file grows with each execution, demonstrating non-idempotent behavior.
+Subtask 2.2: Create an Idempotent Version
+
+Now, let's create a properly idempotent playbook:
+
+cat > idempotent.yml << 'EOF'
+---
+- name: Idempotent Playbook Example
+  hosts: node1
+  become: yes
+  vars:
+    log_file: /tmp/idempotent_log.txt
+    log_message: "Playbook execution completed successfully"
+    
+  tasks:
+    - name: Ensure log file exists with specific content (idempotent)
+      lineinfile:
+        path: "{{ log_file }}"
+        line: "{{ log_message }}"
+        create: yes
+        state: present
+      register: log_result
+      
+    - name: Display log file change status
+      debug:
+        msg: "Log file was {{ 'modified' if log_result.changed else 'already correct' }}"
+        
+    - name: Ensure user exists (idempotent)
+      user:
+        name: testuser2
+        state: present
+        shell: /bin/bash
+        home: /home/testuser2
+        create_home: yes
+      register: user_result
+      
+    - name: Display user creation status
+      debug:
+        msg: "User was {{ 'created' if user_result.changed else 'already present' }}"
+        
+    - name: Ensure package is installed (idempotent)
+      yum:
+        name: tree
+        state: present
+      register: package_result
+      
+    - name: Display package installation status
+      debug:
+        msg: "Package was {{ 'installed' if package_result.changed else 'already installed' }}"
+EOF
+
+Task 3: Testing Idempotency Through Multiple Executions
+Subtask 3.1: First Execution
+
+    Run the idempotent playbook for the first time:
+
+ansible-playbook idempotent.yml -v
+
+    Observe the output and note:
+        Which tasks show changed status
+        The debug messages indicating what actions were taken
+        The overall play recap showing changes
+
+Subtask 3.2: Second Execution
+
+    Run the same playbook again immediately:
+
+ansible-playbook idempotent.yml -v
+
+    Compare the results with the first run:
+        Tasks should show ok status instead of changed
+        Debug messages should indicate items were "already correct"
+        Play recap should show 0 changes
+
+Subtask 3.3: Verify System State
+
+    Check that the log file contains only one line:
+
+ansible node1 -m shell -a "cat /tmp/idempotent_log.txt"
+
+    Verify the user was created properly:
+
+ansible node1 -m shell -a "id testuser2"
+
+    Confirm the package is installed:
+
+ansible node1 -m shell -a "rpm -q tree"
+
+Task 4: Advanced Idempotency Patterns
+Subtask 4.1: Conditional Idempotency
+
+Create a more complex idempotent playbook with conditional logic:
+
+cat > advanced-idempotent.yml << 'EOF'
+---
+- name: Advanced Idempotency Patterns
+  hosts: all
+  become: yes
+  vars:
+    app_config_dir: /etc/myapp
+    app_config_file: "{{ app_config_dir }}/config.conf"
+    required_packages:
+      - httpd
+      - mod_ssl
+    
+  tasks:
+    - name: Ensure application directory exists
+      file:
+        path: "{{ app_config_dir }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      register: dir_result
+      
+    - name: Create application configuration file
+      template:
+        src: app_config.j2
+        dest: "{{ app_config_file }}"
+        mode: '0644'
+        owner: root
+        group: root
+        backup: yes
+      register: config_result
+      notify: restart_service
+      
+    - name: Ensure required packages are installed
+      yum:
+        name: "{{ required_packages }}"
+        state: present
+      register: packages_result
+      
+    - name: Ensure Apache service is enabled and started
+      systemd:
+        name: httpd
+        state: started
+        enabled: yes
+      register: service_result
+      
+    - name: Configure firewall for HTTP traffic
+      firewalld:
+        service: http
+        permanent: yes
+        state: enabled
+        immediate: yes
+      register: firewall_result
+      ignore_errors: yes
+      
+    - name: Display summary of changes
+      debug:
+        msg:
+          - "Directory: {{ 'created' if dir_result.changed else 'already exists' }}"
+          - "Config: {{ 'updated' if config_result.changed else 'unchanged' }}"
+          - "Packages: {{ 'installed' if packages_result.changed else 'already present' }}"
+          - "Service: {{ 'configured' if service_result.changed else 'already running' }}"
+          - "Firewall: {{ 'configured' if firewall_result.changed else 'already configured' }}"
+          
+  handlers:
+    - name: restart_service
+      systemd:
+        name: httpd
+        state: restarted
+      listen: restart_service
+EOF
+
+Subtask 4.2: Create Configuration Template
+
+Create a Jinja2 template for the configuration file:
+
+mkdir -p templates
+cat > templates/app_config.j2 << 'EOF'
+# Application Configuration File
+# Generated by Ansible on {{ ansible_date_time.iso8601 }}
+
+[general]
+hostname = {{ ansible_hostname }}
+ip_address = {{ ansible_default_ipv4.address }}
+environment = production
+
+[security]
+ssl_enabled = true
+port = 443
+
+[logging]
+log_level = info
+log_file = /var/log/myapp/application.log
+EOF
+
+Subtask 4.3: Test Advanced Idempotency
+
+    Run the advanced playbook:
+
+ansible-playbook advanced-idempotent.yml
+
+    Run it again to verify idempotency:
+
+ansible-playbook advanced-idempotent.yml
+
+    Make a small change to test conditional updates:
+
+# Modify the template
+sed -i 's/log_level = info/log_level = debug/' templates/app_config.j2
+
+# Run playbook again
+ansible-playbook advanced-idempotent.yml
+
+    Run once more to confirm idempotency after the change:
+
+ansible-playbook advanced-idempotent.yml
+
+Task 5: Handling Edge Cases and Best Practices
+Subtask 5.1: Using Check Mode for Validation
+
+    Run playbooks in check mode to preview changes without applying them:
+
+ansible-playbook idempotent.yml --check
+
+    Use diff mode to see what would change:
+
+ansible-playbook advanced-idempotent.yml --check --diff
+
+Subtask 5.2: Implementing Proper Error Handling
+
+Create a playbook with robust error handling:
+
+cat > robust-idempotent.yml << 'EOF'
+---
+- name: Robust Idempotent Playbook
+  hosts: node1
+  become: yes
+  vars:
+    service_name: custom-app
+    config_path: /etc/custom-app
+    
+  tasks:
+    - name: Check if service exists
+      stat:
+        path: "/etc/systemd/system/{{ service_name }}.service"
+      register: service_file
+      
+    - name: Ensure configuration directory exists
+      file:
+        path: "{{ config_path }}"
+        state: directory
+        mode: '0755'
+      register: config_dir
+      
+    - name: Create service configuration only if directory was created
+      copy:
+        content: |
+          # Custom application configuration
+          APP_NAME={{ service_name }}
+          CONFIG_DIR={{ config_path }}
+          CREATED_BY=ansible
+        dest: "{{ config_path }}/app.conf"
+        mode: '0644'
+      when: config_dir.changed
+      register: app_config
+      
+    - name: Ensure log directory exists with proper permissions
+      file:
+        path: /var/log/custom-app
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      register: log_dir
+      
+    - name: Set up log rotation only if log directory was created
+      copy:
+        content: |
+          /var/log/custom-app/*.log {
+              daily
+              rotate 7
+              compress
+              delaycompress
+              missingok
+              notifempty
+          }
+        dest: /etc/logrotate.d/custom-app
+        mode: '0644'
+      when: log_dir.changed
+      
+    - name: Display conditional execution results
+      debug:
+        msg:
+          - "Config directory: {{ 'created' if config_dir.changed else 'already exists' }}"
+          - "App config: {{ 'created' if app_config.changed else 'skipped (directory existed)' }}"
+          - "Log directory: {{ 'created' if log_dir.changed else 'already exists' }}"
+EOF
+
+Subtask 5.3: Test Robust Implementation
+
+    Run the robust playbook:
+
+ansible-playbook robust-idempotent.yml -v
+
+    Run it again to see conditional behavior:
+
+ansible-playbook robust-idempotent.yml -v
+
+    Remove the configuration directory and run again:
+
+ansible node1 -m file -a "path=/etc/custom-app state=absent" --become
+ansible-playbook robust-idempotent.yml -v
+
+Task 6: Measuring and Reporting Idempotency
+Subtask 6.1: Create a Comprehensive Test Playbook
+
+cat > idempotency-test.yml << 'EOF'
+---
+- name: Comprehensive Idempotency Test
+  hosts: all
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Record start time
+      set_fact:
+        start_time: "{{ ansible_date_time.epoch }}"
+        
+    - name: Test file operations idempotency
+      file:
+        path: /tmp/test-{{ item }}
+        state: touch
+        mode: '0644'
+      loop:
+        - file1
+        - file2
+        - file3
+      register: file_results
+      
+    - name: Test package installation idempotency
+      yum:
+        name:
+          - wget
+          - curl
+          - vim
+        state: present
+      register: package_results
+      
+    - name: Test service management idempotency
+      systemd:
+        name: sshd
+        state: started
+        enabled: yes
+      register: service_results
+      
+    - name: Test user management idempotency
+      user:
+        name: "testuser{{ item }}"
+        state: present
+        shell: /bin/bash
+      loop:
+        - 1
+        - 2
+        - 3
+      register: user_results
+      
+    - name: Record end time
+      set_fact:
+        end_time: "{{ ansible_date_time.epoch }}"
+        
+    - name: Calculate execution time
+      set_fact:
+        execution_time: "{{ (end_time | int) - (start_time | int) }}"
+        
+    - name: Generate idempotency report
+      debug:
+        msg:
+          - "=== IDEMPOTENCY TEST REPORT ==="
+          - "Execution time: {{ execution_time }} seconds"
+          - "Files changed: {{ file_results.results | selectattr('changed') | list | length }}/{{ file_results.results | length }}"
+          - "Packages changed: {{ 'Yes' if package_results.changed else 'No' }}"
+          - "Service changed: {{ 'Yes' if service_results.changed else 'No' }}"
+          - "Users changed: {{ user_results.results | selectattr('changed') | list | length }}/{{ user_results.results | length }}"
+          - "Overall status: {{ 'CHANGES MADE' if (file_results.changed or package_results.changed or service_results.changed or user_results.changed) else 'IDEMPOTENT' }}"
+EOF
+
+Subtask 6.2: Run Idempotency Tests
+
+    First execution (should make changes):
+
+echo "=== FIRST RUN ==="
+ansible-playbook idempotency-test.yml
+
+    Second execution (should be idempotent):
+
+echo "=== SECOND RUN ==="
+ansible-playbook idempotency-test.yml
+
+    Third execution (confirm continued idempotency):
+
+echo "=== THIRD RUN ==="
+ansible-playbook idempotency-test.yml
+
+Troubleshooting Common Issues
+Issue 1: Tasks Always Show Changed Status
+
+Problem: Tasks appear to make changes on every run Solution:
+
+    Use appropriate modules instead of shell/command
+    Implement proper conditionals with when clauses
+    Use creates parameter for command/shell modules when necessary
+
+Issue 2: File Permissions or Ownership Issues
+
+Problem: File tasks always show changes due to permission differences Solution:
+
+- name: Ensure file with correct permissions
+  file:
+    path: /path/to/file
+    state: touch
+    mode: '0644'
+    owner: root
+    group: root
+
+Issue 3: Service Restart Loops
+
+Problem: Services restart unnecessarily Solution: Use handlers and proper service state management:
+
+- name: Configure service
+  template:
+    src: config.j2
+    dest: /etc/service/config
+  notify: restart service
+
+handlers:
+  - name: restart service
+    systemd:
+      name: myservice
+      state: restarted
+
+Conclusion
+
+In this lab, you have successfully:
+
+    Understood idempotency principles and why they are crucial for reliable automation
+    Created both non-idempotent and idempotent playbooks to see the difference in behavior
+    Implemented best practices for ensuring tasks are idempotent using appropriate Ansible modules
+    Tested playbook idempotency by running the same playbooks multiple times and verifying consistent results
+    Applied advanced patterns including conditional logic, error handling, and proper change detection
+    Measured and reported on idempotency behavior to validate automation reliability
+
+Why This Matters: Idempotent playbooks are essential for:
+
+    Production reliability: Safe to run automation multiple times without fear of breaking systems
+    Disaster recovery: Playbooks can restore systems to desired state regardless of current condition
+    Continuous compliance: Regular execution ensures systems maintain proper configuration
+    Team confidence: Developers and operators can trust automation to behave predictably
+
+These skills are fundamental for advanced Ansible automation and are critical for the Red Hat Ansible Automation Platform certification. Idempotent automation forms the foundation of reliable, scalable infrastructure management in enterprise environments.

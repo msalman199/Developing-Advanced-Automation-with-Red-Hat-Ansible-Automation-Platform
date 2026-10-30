@@ -1,0 +1,9 @@
+---
+- name: Performance Comparison - Free
+  hosts: webservers
+  gather_facts: no
+  strategy: free
+  vars:
+    test_name: "free"
+  tasks:
+    - include_tasks: workload-tasks.yml

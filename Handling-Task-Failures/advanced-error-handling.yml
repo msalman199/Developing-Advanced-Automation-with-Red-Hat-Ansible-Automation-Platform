@@ -1,0 +1,89 @@
+---
+- name: Advanced Error Handling with Blocks
+  hosts: webservers
+  become: yes
+  
+  tasks:
+    - name: Web server setup with error handling
+      block:
+        - name: Install web server packages
+          package:
+            name: "{{ item }}"
+            state: present
+          loop:
+            - httpd
+            - mod_ssl
+            
+        - name: Create web directory
+          file:
+            path: /var/www/html/test
+            state: directory
+            mode: '0755'
+            
+        - name: Deploy test page
+          copy:
+            content: |
+              <html>
+              <head><title>Test Page</title></head>
+              <body><h1>Server: {{ inventory_hostname }}</h1></body>
+              </html>
+            dest: /var/www/html/test/index.html
+            mode: '0644'
+            
+        - name: Start and enable web server
+          service:
+            name: httpd
+            state: started
+            enabled: yes
+            
+        - name: Test web server response
+          uri:
+            url: "http://{{ inventory_hostname }}/test/"
+            return_content: yes
+          register: web_test
+          
+      rescue:
+        - name: Handle web server setup failure
+          debug:
+            msg: "Web server setup failed, attempting recovery..."
+            
+        - name: Check if httpd is installed
+          package_facts:
+            
+        - name: Install minimal web server if main installation failed
+          package:
+            name: nginx
+            state: present
+          when: "'httpd' not in ansible_facts.packages"
+          
+        - name: Start alternative web server
+          service:
+            name: nginx
+            state: started
+            enabled: yes
+          when: "'httpd' not in ansible_facts.packages"
+          
+        - name: Create simple nginx test page
+          copy:
+            content: "Backup web server running on {{ inventory_hostname }}"
+            dest: /usr/share/nginx/html/index.html
+          when: "'httpd' not in ansible_facts.packages"
+          
+      always:
+        - name: Ensure firewall allows HTTP traffic
+          firewalld:
+            service: http
+            permanent: yes
+            state: enabled
+            immediate: yes
+          ignore_errors: yes
+          
+        - name: Log completion status
+          lineinfile:
+            path: /var/log/ansible-deployment.log
+            line: "{{ ansible_date_time.iso8601 }} - Web server deployment completed on {{ inventory_hostname }}"
+            create: yes
+            
+        - name: Display final status
+          debug:
+            msg: "Web server deployment process completed for {{ inventory_hostname }}"

@@ -1,0 +1,38 @@
+---
+- name: Sequential Task Execution Baseline
+  hosts: webservers
+  gather_facts: yes
+  serial: 1
+
+  tasks:
+    - name: Install packages sequentially
+      yum:
+        name:
+          - htop
+          - tree
+          - wget
+          - curl
+        state: present
+      become: yes
+
+    - name: Create multiple directories
+      file:
+        path: "/tmp/test_dir_{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+
+    - name: Download test files
+      get_url:
+        url: "https://httpbin.org/delay/2"
+        dest: "/tmp/test_file_{{ inventory_hostname }}.json"
+        timeout: 30
+
+    - name: Simulate processing time
+      command: sleep 3
+      changed_when: false

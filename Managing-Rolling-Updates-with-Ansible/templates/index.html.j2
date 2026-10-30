@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Rolling Update Demo - Version {{ app_version }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+        .version { color: {{ version_color | default('blue') }}; font-size: 24px; }
+        .server { color: green; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <h1>Rolling Update Demo</h1>
+    <p class="version">Application Version: {{ app_version }}</p>
+    <p class="server">Server: {{ inventory_hostname }}</p>
+    <p>Deployment Time: {{ ansible_date_time.iso8601 }}</p>
+</body>
+</html>

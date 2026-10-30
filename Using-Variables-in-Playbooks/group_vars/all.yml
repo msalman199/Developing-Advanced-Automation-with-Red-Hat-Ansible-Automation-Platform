@@ -1,0 +1,12 @@
+---
+# Common variables for all hosts
+ntp_server: "pool.ntp.org"
+timezone: "America/New_York"
+admin_user: "ansible"
+
+# Common packages
+base_packages:
+  - vim
+  - curl
+  - wget
+  - htop

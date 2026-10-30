@@ -1,0 +1,37 @@
+{
+  "servers": [
+    {
+      "hostname": "web-prod-01",
+      "ip": "10.0.1.10",
+      "role": "webserver",
+      "environment": "production",
+      "cpu_usage": 75,
+      "memory_usage": 82,
+      "disk_usage_bytes": 85899345920,
+      "last_backup": "2024-01-10",
+      "status": "active"
+    },
+    {
+      "hostname": "web-prod-02",
+      "ip": "10.0.1.11",
+      "role": "webserver",
+      "environment": "production",
+      "cpu_usage": 68,
+      "memory_usage": 79,
+      "disk_usage_bytes": 92274688000,
+      "last_backup": "2024-01-12",
+      "status": "active"
+    },
+    {
+      "hostname": "db-prod-01",
+      "ip": "10.0.2.10",
+      "role": "database",
+      "environment": "production",
+      "cpu_usage": 45,
+      "memory_usage": 91,
+      "disk_usage_bytes": 549755813888,
+      "last_backup": "2024-01-14",
+      "status": "maintenance"
+    }
+  ]
+}

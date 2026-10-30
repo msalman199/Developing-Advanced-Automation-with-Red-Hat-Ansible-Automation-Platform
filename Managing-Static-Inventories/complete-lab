@@ -1,0 +1,789 @@
+Lab 10: Managing Static Inventories
+Objectives
+
+By the end of this lab, you will be able to:
+
+    Understand the structure and purpose of static inventories in Ansible
+    Create comprehensive static inventory files using YAML format
+    Organize hosts into logical groups with variables
+    Implement host-specific and group-specific variables
+    Use static inventories effectively in playbooks to configure services
+    Apply best practices for inventory management in enterprise environments
+
+Prerequisites
+
+Before starting this lab, you should have:
+
+    Basic understanding of Ansible concepts (playbooks, tasks, modules)
+    Familiarity with YAML syntax and formatting
+    Knowledge of Linux command line operations
+    Understanding of SSH connectivity and key-based authentication
+    Experience with basic system administration tasks
+
+Lab Environment
+
+Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment. No need to build your own virtual machines or configure complex networking.
+
+Your lab environment includes:
+
+    Ansible control node (pre-installed with Ansible)
+    Multiple target hosts for inventory management
+    SSH keys already configured for seamless connectivity
+
+Task 1: Create a Static Inventory File in YAML Format
+Subtask 1.1: Understanding Static Inventory Structure
+
+Static inventories are files that define the hosts and groups that Ansible will manage. Unlike dynamic inventories that query external systems, static inventories are manually maintained files that provide complete control over host organization.
+
+Key Benefits of Static Inventories:
+
+    Predictable: Host definitions remain consistent
+    Version Controlled: Can be stored in Git repositories
+    Flexible: Support complex grouping and variable structures
+    Secure: No external API calls required
+
+Subtask 1.2: Create the Basic Directory Structure
+
+First, let's create a proper directory structure for our inventory management:
+
+# Create the main project directory
+mkdir -p ~/ansible-inventory-lab
+cd ~/ansible-inventory-lab
+
+# Create subdirectories for organization
+mkdir -p inventories/production
+mkdir -p inventories/staging
+mkdir -p group_vars
+mkdir -p host_vars
+mkdir -p playbooks
+
+Subtask 1.3: Create a Comprehensive Static Inventory File
+
+Create a production inventory file that demonstrates various inventory features:
+
+nano inventories/production/hosts.yml
+
+Add the following comprehensive inventory structure:
+
+---
+# Production Environment Static Inventory
+# This inventory demonstrates advanced static inventory management
+
+all:
+  children:
+    # Web Server Group
+    webservers:
+      hosts:
+        web01.example.com:
+          ansible_host: 192.168.1.10
+          ansible_user: webadmin
+          server_role: primary
+          max_connections: 1000
+        web02.example.com:
+          ansible_host: 192.168.1.11
+          ansible_user: webadmin
+          server_role: secondary
+          max_connections: 800
+        web03.example.com:
+          ansible_host: 192.168.1.12
+          ansible_user: webadmin
+          server_role: secondary
+          max_connections: 800
+      vars:
+        http_port: 80
+        https_port: 443
+        service_name: nginx
+        environment: production
+        backup_enabled: true
+        monitoring_enabled: true
+
+    # Database Server Group
+    databases:
+      hosts:
+        db01.example.com:
+          ansible_host: 192.168.1.20
+          ansible_user: dbadmin
+          db_role: master
+          max_connections: 500
+        db02.example.com:
+          ansible_host: 192.168.1.21
+          ansible_user: dbadmin
+          db_role: slave
+          max_connections: 300
+      vars:
+        db_port: 3306
+        service_name: mysql
+        environment: production
+        backup_schedule: "0 2 * * *"
+        replication_enabled: true
+
+    # Load Balancer Group
+    loadbalancers:
+      hosts:
+        lb01.example.com:
+          ansible_host: 192.168.1.30
+          ansible_user: lbadmin
+          lb_algorithm: round_robin
+        lb02.example.com:
+          ansible_host: 192.168.1.31
+          ansible_user: lbadmin
+          lb_algorithm: least_connections
+      vars:
+        service_name: haproxy
+        environment: production
+        health_check_interval: 30
+
+    # Monitoring Group
+    monitoring:
+      hosts:
+        monitor01.example.com:
+          ansible_host: 192.168.1.40
+          ansible_user: monitor
+          monitoring_type: primary
+      vars:
+        service_name: prometheus
+        environment: production
+        retention_days: 30
+
+  # Global variables for all hosts
+  vars:
+    ansible_ssh_private_key_file: ~/.ssh/id_rsa
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    domain_name: example.com
+    timezone: America/New_York
+    ntp_servers:
+      - 0.pool.ntp.org
+      - 1.pool.ntp.org
+    dns_servers:
+      - 8.8.8.8
+      - 8.8.4.4
+
+Subtask 1.4: Create Group-Specific Variable Files
+
+Create group-specific variables to demonstrate advanced inventory management:
+
+# Create webservers group variables
+nano group_vars/webservers.yml
+
+---
+# Web Server Group Variables
+web_packages:
+  - nginx
+  - php-fpm
+  - certbot
+
+ssl_certificate_path: /etc/ssl/certs
+ssl_private_key_path: /etc/ssl/private
+
+firewall_rules:
+  - port: 80
+    protocol: tcp
+    source: any
+  - port: 443
+    protocol: tcp
+    source: any
+  - port: 22
+    protocol: tcp
+    source: "192.168.1.0/24"
+
+log_rotation:
+  access_log_days: 30
+  error_log_days: 90
+
+# Create databases group variables
+nano group_vars/databases.yml
+
+---
+# Database Group Variables
+db_packages:
+  - mysql-server
+  - mysql-client
+  - python3-pymysql
+
+mysql_config:
+  bind_address: "0.0.0.0"
+  max_connections: 500
+  innodb_buffer_pool_size: "1G"
+  query_cache_size: "64M"
+
+backup_config:
+  backup_dir: /var/backups/mysql
+  retention_days: 7
+  compression: true
+
+firewall_rules:
+  - port: 3306
+    protocol: tcp
+    source: "192.168.1.0/24"
+  - port: 22
+    protocol: tcp
+    source: "192.168.1.0/24"
+
+Subtask 1.5: Create Host-Specific Variable Files
+
+Create host-specific variables for customized configurations:
+
+# Create host-specific variables for web01
+nano host_vars/web01.example.com.yml
+
+---
+# Host-specific variables for web01.example.com
+server_id: web01
+is_primary: true
+backup_priority: high
+
+nginx_worker_processes: 4
+nginx_worker_connections: 2048
+
+custom_vhosts:
+  - name: app1.example.com
+    document_root: /var/www/app1
+    ssl_enabled: true
+  - name: app2.example.com
+    document_root: /var/www/app2
+    ssl_enabled: false
+
+Subtask 1.6: Validate the Inventory Structure
+
+Test your inventory file to ensure it's properly formatted:
+
+# List all hosts in the inventory
+ansible-inventory -i inventories/production/hosts.yml --list
+
+# List hosts in a specific group
+ansible-inventory -i inventories/production/hosts.yml --list --limit webservers
+
+# Show host variables for a specific host
+ansible-inventory -i inventories/production/hosts.yml --host web01.example.com
+
+# Verify inventory graph structure
+ansible-inventory -i inventories/production/hosts.yml --graph
+
+Task 2: Use the Inventory in a Playbook to Configure a Service
+Subtask 2.1: Create a Comprehensive Service Configuration Playbook
+
+Create a playbook that demonstrates using the static inventory to configure multiple services:
+
+nano playbooks/configure-services.yml
+
+---
+- name: Configure Web Servers
+  hosts: webservers
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Display host information
+      debug:
+        msg: |
+          Configuring {{ inventory_hostname }}
+          Role: {{ server_role }}
+          Environment: {{ environment }}
+          Max Connections: {{ max_connections }}
+
+    - name: Update package cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+
+    - name: Install web server packages
+      apt:
+        name: "{{ web_packages }}"
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Create web directories
+      file:
+        path: "{{ item.document_root }}"
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+      loop: "{{ custom_vhosts | default([]) }}"
+      when: custom_vhosts is defined
+
+    - name: Configure nginx main configuration
+      template:
+        src: nginx.conf.j2
+        dest: /etc/nginx/nginx.conf
+        backup: yes
+      notify: restart nginx
+
+    - name: Configure virtual hosts
+      template:
+        src: vhost.conf.j2
+        dest: "/etc/nginx/sites-available/{{ item.name }}"
+      loop: "{{ custom_vhosts | default([]) }}"
+      when: custom_vhosts is defined
+      notify: restart nginx
+
+    - name: Enable virtual hosts
+      file:
+        src: "/etc/nginx/sites-available/{{ item.name }}"
+        dest: "/etc/nginx/sites-enabled/{{ item.name }}"
+        state: link
+      loop: "{{ custom_vhosts | default([]) }}"
+      when: custom_vhosts is defined
+      notify: restart nginx
+
+    - name: Configure firewall rules
+      ufw:
+        rule: allow
+        port: "{{ item.port }}"
+        proto: "{{ item.protocol }}"
+        src: "{{ item.source }}"
+      loop: "{{ firewall_rules }}"
+      when: firewall_rules is defined
+
+    - name: Start and enable nginx service
+      systemd:
+        name: "{{ service_name }}"
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: restart nginx
+      systemd:
+        name: nginx
+        state: restarted
+
+- name: Configure Database Servers
+  hosts: databases
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Display database server information
+      debug:
+        msg: |
+          Configuring {{ inventory_hostname }}
+          Database Role: {{ db_role }}
+          Environment: {{ environment }}
+          Max Connections: {{ max_connections }}
+
+    - name: Install database packages
+      apt:
+        name: "{{ db_packages }}"
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Create backup directory
+      file:
+        path: "{{ backup_config.backup_dir }}"
+        state: directory
+        owner: mysql
+        group: mysql
+        mode: '0750'
+
+    - name: Configure MySQL
+      template:
+        src: my.cnf.j2
+        dest: /etc/mysql/mysql.conf.d/custom.cnf
+        backup: yes
+      notify: restart mysql
+
+    - name: Start and enable MySQL service
+      systemd:
+        name: "{{ service_name }}"
+        state: started
+        enabled: yes
+
+    - name: Configure database firewall rules
+      ufw:
+        rule: allow
+        port: "{{ item.port }}"
+        proto: "{{ item.protocol }}"
+        src: "{{ item.source }}"
+      loop: "{{ firewall_rules }}"
+      when: firewall_rules is defined
+
+  handlers:
+    - name: restart mysql
+      systemd:
+        name: mysql
+        state: restarted
+
+- name: Configure Load Balancers
+  hosts: loadbalancers
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Display load balancer information
+      debug:
+        msg: |
+          Configuring {{ inventory_hostname }}
+          Algorithm: {{ lb_algorithm }}
+          Environment: {{ environment }}
+
+    - name: Install HAProxy
+      apt:
+        name: haproxy
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Configure HAProxy
+      template:
+        src: haproxy.cfg.j2
+        dest: /etc/haproxy/haproxy.cfg
+        backup: yes
+      notify: restart haproxy
+
+    - name: Start and enable HAProxy service
+      systemd:
+        name: "{{ service_name }}"
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: restart haproxy
+      systemd:
+        name: haproxy
+        state: restarted
+
+Subtask 2.2: Create Template Files
+
+Create the necessary template files for service configuration:
+
+# Create templates directory
+mkdir -p templates
+
+# Create nginx configuration template
+nano templates/nginx.conf.j2
+
+user www-data;
+worker_processes {{ nginx_worker_processes | default('auto') }};
+pid /run/nginx.pid;
+
+events {
+    worker_connections {{ nginx_worker_connections | default('768') }};
+    use epoll;
+    multi_accept on;
+}
+
+http {
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+    server_tokens off;
+
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    # Logging Settings
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log /var/log/nginx/access.log main;
+    error_log /var/log/nginx/error.log;
+
+    # Gzip Settings
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+    # Virtual Host Configs
+    include /etc/nginx/conf.d/*.conf;
+    include /etc/nginx/sites-enabled/*;
+}
+
+# Create virtual host template
+nano templates/vhost.conf.j2
+
+server {
+    listen {{ http_port }};
+    {% if item.ssl_enabled %}
+    listen {{ https_port }} ssl;
+    {% endif %}
+    
+    server_name {{ item.name }};
+    root {{ item.document_root }};
+    index index.html index.htm index.php;
+
+    {% if item.ssl_enabled %}
+    ssl_certificate {{ ssl_certificate_path }}/{{ item.name }}.crt;
+    ssl_certificate_key {{ ssl_private_key_path }}/{{ item.name }}.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    {% endif %}
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/var/run/php/php7.4-fpm.sock;
+    }
+
+    location ~ /\.ht {
+        deny all;
+    }
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header X-Content-Type-Options "nosniff" always;
+}
+
+# Create MySQL configuration template
+nano templates/my.cnf.j2
+
+[mysqld]
+bind-address = {{ mysql_config.bind_address }}
+port = {{ db_port }}
+max_connections = {{ mysql_config.max_connections }}
+
+# InnoDB settings
+innodb_buffer_pool_size = {{ mysql_config.innodb_buffer_pool_size }}
+innodb_log_file_size = 256M
+innodb_flush_log_at_trx_commit = 1
+innodb_flush_method = O_DIRECT
+
+# Query cache
+query_cache_type = 1
+query_cache_size = {{ mysql_config.query_cache_size }}
+
+# Logging
+log_error = /var/log/mysql/error.log
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow.log
+long_query_time = 2
+
+# Binary logging for replication
+{% if replication_enabled %}
+log_bin = /var/log/mysql/mysql-bin.log
+server_id = {{ ansible_default_ipv4.address.split('.')[-1] }}
+{% endif %}
+
+Subtask 2.3: Create an Inventory-Specific Playbook
+
+Create a playbook that demonstrates advanced inventory usage with conditional logic:
+
+nano playbooks/inventory-demo.yml
+
+---
+- name: Demonstrate Advanced Inventory Usage
+  hosts: all
+  gather_facts: yes
+  
+  tasks:
+    - name: Display inventory information
+      debug:
+        msg: |
+          Host: {{ inventory_hostname }}
+          Groups: {{ group_names }}
+          Environment: {{ environment }}
+          All groups in inventory: {{ groups.keys() | list }}
+
+    - name: Show webserver-specific information
+      debug:
+        msg: |
+          Web server role: {{ server_role }}
+          HTTP Port: {{ http_port }}
+          HTTPS Port: {{ https_port }}
+          Max connections: {{ max_connections }}
+      when: inventory_hostname in groups['webservers']
+
+    - name: Show database-specific information
+      debug:
+        msg: |
+          Database role: {{ db_role }}
+          Database port: {{ db_port }}
+          Replication enabled: {{ replication_enabled }}
+      when: inventory_hostname in groups['databases']
+
+    - name: Show load balancer information
+      debug:
+        msg: |
+          Load balancer algorithm: {{ lb_algorithm }}
+          Health check interval: {{ health_check_interval }}
+      when: inventory_hostname in groups['loadbalancers']
+
+    - name: Configure common settings for all hosts
+      debug:
+        msg: |
+          Timezone: {{ timezone }}
+          Domain: {{ domain_name }}
+          DNS Servers: {{ dns_servers | join(', ') }}
+          NTP Servers: {{ ntp_servers | join(', ') }}
+
+    - name: Show primary servers only
+      debug:
+        msg: "{{ inventory_hostname }} is a primary server"
+      when: 
+        - server_role is defined
+        - server_role == "primary"
+
+    - name: Show backup-enabled servers
+      debug:
+        msg: "{{ inventory_hostname }} has backup enabled"
+      when: 
+        - backup_enabled is defined
+        - backup_enabled | bool
+
+Subtask 2.4: Execute Playbooks with the Static Inventory
+
+Run the playbooks using your static inventory:
+
+# Test connectivity to all hosts
+ansible -i inventories/production/hosts.yml all -m ping
+
+# Run the inventory demonstration playbook
+ansible-playbook -i inventories/production/hosts.yml playbooks/inventory-demo.yml
+
+# Run the service configuration playbook (dry run first)
+ansible-playbook -i inventories/production/hosts.yml playbooks/configure-services.yml --check
+
+# Run the actual service configuration
+ansible-playbook -i inventories/production/hosts.yml playbooks/configure-services.yml
+
+# Run playbook for specific groups
+ansible-playbook -i inventories/production/hosts.yml playbooks/configure-services.yml --limit webservers
+
+# Run with increased verbosity for troubleshooting
+ansible-playbook -i inventories/production/hosts.yml playbooks/configure-services.yml -v
+
+Subtask 2.5: Advanced Inventory Operations
+
+Demonstrate advanced inventory management techniques:
+
+# Create a script to validate inventory
+nano scripts/validate-inventory.sh
+
+#!/bin/bash
+
+INVENTORY_FILE="inventories/production/hosts.yml"
+
+echo "=== Inventory Validation Report ==="
+echo "Date: $(date)"
+echo "Inventory File: $INVENTORY_FILE"
+echo
+
+echo "=== All Hosts ==="
+ansible-inventory -i $INVENTORY_FILE --list --yaml | grep -A 1 "hosts:"
+
+echo
+echo "=== Group Structure ==="
+ansible-inventory -i $INVENTORY_FILE --graph
+
+echo
+echo "=== Host Count by Group ==="
+for group in webservers databases loadbalancers monitoring; do
+    count=$(ansible-inventory -i $INVENTORY_FILE --list | jq -r ".${group}.hosts | length" 2>/dev/null || echo "0")
+    echo "$group: $count hosts"
+done
+
+echo
+echo "=== Connectivity Test ==="
+ansible -i $INVENTORY_FILE all -m ping --one-line
+
+echo
+echo "=== Variable Validation ==="
+ansible-inventory -i $INVENTORY_FILE --list | jq '.all.vars' 2>/dev/null || echo "No global variables found"
+
+# Make the script executable
+chmod +x scripts/validate-inventory.sh
+
+# Run the validation script
+./scripts/validate-inventory.sh
+
+Troubleshooting Common Issues
+Issue 1: YAML Syntax Errors
+
+Problem: Inventory file fails to parse due to YAML syntax errors.
+
+Solution:
+
+# Validate YAML syntax
+python3 -c "import yaml; yaml.safe_load(open('inventories/production/hosts.yml'))"
+
+# Use ansible-inventory to check for errors
+ansible-inventory -i inventories/production/hosts.yml --list
+
+Issue 2: Host Connectivity Problems
+
+Problem: Ansible cannot connect to hosts defined in inventory.
+
+Solution:
+
+# Test SSH connectivity manually
+ssh -i ~/.ssh/id_rsa webadmin@192.168.1.10
+
+# Check SSH configuration
+ansible -i inventories/production/hosts.yml web01.example.com -m setup
+
+# Debug connection issues
+ansible -i inventories/production/hosts.yml web01.example.com -m ping -vvv
+
+Issue 3: Variable Precedence Issues
+
+Problem: Variables not applying as expected due to precedence conflicts.
+
+Solution:
+
+# Check variable precedence for a specific host
+ansible-inventory -i inventories/production/hosts.yml --host web01.example.com
+
+# Debug variable sources
+ansible-playbook -i inventories/production/hosts.yml playbooks/inventory-demo.yml --limit web01.example.com -vv
+
+Best Practices for Static Inventory Management
+1. Organization Structure
+
+    Use consistent directory structures
+    Separate inventories by environment
+    Group related hosts logically
+    Use meaningful naming conventions
+
+2. Variable Management
+
+    Place common variables in group_vars/all.yml
+    Use group-specific variables for shared configurations
+    Reserve host_vars for truly unique settings
+    Document variable purposes and dependencies
+
+3. Security Considerations
+
+    Store sensitive data in Ansible Vault
+    Use SSH keys instead of passwords
+    Limit inventory file permissions
+    Regular security audits of access patterns
+
+4. Maintenance Practices
+
+    Version control inventory files
+    Regular validation and testing
+    Document inventory changes
+    Implement change approval processes
+
+Conclusion
+
+In this comprehensive lab, you have successfully:
+
+    Created sophisticated static inventory files using YAML format with complex host groupings, variables, and hierarchical structures
+    Implemented advanced inventory management techniques including group variables, host variables, and inheritance patterns
+    Developed comprehensive playbooks that leverage static inventory data to configure multiple services across different server roles
+    Demonstrated practical inventory usage with real-world scenarios including web servers, databases, load balancers, and monitoring systems
+    Applied enterprise-grade practices for inventory organization, security, and maintenance
+
+Why This Matters:
+
+Static inventories are fundamental to enterprise Ansible automation because they provide:
+
+    Predictable Infrastructure Management: Consistent host definitions enable reliable automation
+    Scalable Organization: Logical grouping supports complex multi-tier applications
+    Version Control Integration: Static files integrate seamlessly with Git workflows
+    Security and Compliance: Controlled access and audit trails for infrastructure changes
+    Operational Efficiency: Reduced manual configuration and improved deployment consistency
+
+The skills you've developed in this lab form the foundation for advanced Ansible automation in production environments, enabling you to manage complex infrastructure at scale while maintaining security, reliability, and operational excellence.
+
+Your mastery of static inventory management positions you to tackle enterprise automation challenges and contributes directly to the objectives of the Red Hat Ansible Automation Platform certification path.
