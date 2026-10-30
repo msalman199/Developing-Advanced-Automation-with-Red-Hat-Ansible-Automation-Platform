@@ -1,0 +1,11 @@
+---
+# defaults file for database
+db_package_name: "{{ 'mariadb-server' if ansible_os_family == 'RedHat' else 'mysql-server' }}"
+db_service_name: "{{ 'mariadb' if ansible_os_family == 'RedHat' else 'mysql' }}"
+python_mysql_package: "{{ 'python3-PyMySQL' if ansible_os_family == 'RedHat' else 'python3-pymysql' }}"
+mysql_socket: "{{ '/var/lib/mysql/mysql.sock' if ansible_os_family == 'RedHat' else '/var/run/mysqld/mysqld.sock' }}"
+db_root_password: "SecureRootPass123!"
+db_name: "webapp_db"
+db_user: "webapp_user"
+db_password: "WebAppPass123!"---
+# defaults file for .

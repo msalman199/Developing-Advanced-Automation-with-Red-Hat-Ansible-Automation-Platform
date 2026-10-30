@@ -1,0 +1,50 @@
+---
+# tasks file for database
+- name: Install MySQL/MariaDB server
+  package:
+    name: "{{ db_package_name }}"
+    state: present
+  become: yes
+
+- name: Install Python MySQL client
+  package:
+    name: "{{ python_mysql_package }}"
+    state: present
+  become: yes
+
+- name: Start and enable database service
+  service:
+    name: "{{ db_service_name }}"
+    state: started
+    enabled: yes
+  become: yes
+
+- name: Set root password
+  mysql_user:
+    name: root
+    password: "{{ db_root_password }}"
+    login_unix_socket: "{{ mysql_socket }}"
+    state: present
+  become: yes
+  when: db_root_password is defined
+
+- name: Create application database
+  mysql_db:
+    name: "{{ db_name }}"
+    state: present
+    login_user: root
+    login_password: "{{ db_root_password | default(omit) }}"
+  become: yes
+  when: db_name is defined
+
+- name: Create database user
+  mysql_user:
+    name: "{{ db_user }}"
+    password: "{{ db_password }}"
+    priv: "{{ db_name }}.*:ALL"
+    state: present
+    login_user: root
+    login_password: "{{ db_root_password | default(omit) }}"
+  become: yes
+  when: db_user is defined and db_password is defined---
+# tasks file for .

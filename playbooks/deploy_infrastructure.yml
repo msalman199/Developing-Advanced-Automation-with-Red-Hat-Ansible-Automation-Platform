@@ -1,0 +1,42 @@
+---
+- name: Deploy Web Infrastructure
+  hosts: webservers
+  become: yes
+  vars:
+    company_name: "{{ company_name | default('My Company Infrastructure') }}"
+  
+  tasks:
+    - name: Update system packages
+      package:
+        name: '*'
+        state: latest
+      when: update_packages | default(false) | bool
+
+    - name: Include webserver role
+      include_role:
+        name: mycompany.infrastructure.webserver
+
+- name: Deploy Database Infrastructure
+  hosts: databases
+  become: yes
+  
+  tasks:
+    - name: Include database role
+      include_role:
+        name: mycompany.infrastructure.database
+
+- name: Verify deployment
+  hosts: all
+  tasks:
+    - name: Check service status
+      service_facts:
+    
+    - name: Display running services
+      debug:
+        msg: "{{ item }} is running"
+      loop:
+        - httpd
+        - mariadb
+      when: 
+        - ansible_facts.services[item] is defined
+        - ansible_facts.services[item].state == "running"
