@@ -1,0 +1,16 @@
+---
+# Host-specific variables for web01.example.com
+server_id: web01
+is_primary: true
+backup_priority: high
+
+nginx_worker_processes: 4
+nginx_worker_connections: 2048
+
+custom_vhosts:
+  - name: app1.example.com
+    document_root: /var/www/app1
+    ssl_enabled: true
+  - name: app2.example.com
+    document_root: /var/www/app2
+    ssl_enabled: false

@@ -1,0 +1,61 @@
+
+
+---
+- name: Demonstrate Advanced Inventory Usage
+  hosts: all
+  gather_facts: yes
+  
+  tasks:
+    - name: Display inventory information
+      debug:
+        msg: |
+          Host: {{ inventory_hostname }}
+          Groups: {{ group_names }}
+          Environment: {{ environment }}
+          All groups in inventory: {{ groups.keys() | list }}
+
+    - name: Show webserver-specific information
+      debug:
+        msg: |
+          Web server role: {{ server_role }}
+          HTTP Port: {{ http_port }}
+          HTTPS Port: {{ https_port }}
+          Max connections: {{ max_connections }}
+      when: inventory_hostname in groups['webservers']
+
+    - name: Show database-specific information
+      debug:
+        msg: |
+          Database role: {{ db_role }}
+          Database port: {{ db_port }}
+          Replication enabled: {{ replication_enabled }}
+      when: inventory_hostname in groups['databases']
+
+    - name: Show load balancer information
+      debug:
+        msg: |
+          Load balancer algorithm: {{ lb_algorithm }}
+          Health check interval: {{ health_check_interval }}
+      when: inventory_hostname in groups['loadbalancers']
+
+    - name: Configure common settings for all hosts
+      debug:
+        msg: |
+          Timezone: {{ timezone }}
+          Domain: {{ domain_name }}
+          DNS Servers: {{ dns_servers | join(', ') }}
+          NTP Servers: {{ ntp_servers | join(', ') }}
+
+    - name: Show primary servers only
+      debug:
+        msg: "{{ inventory_hostname }} is a primary server"
+      when: 
+        - server_role is defined
+        - server_role == "primary"
+
+    - name: Show backup-enabled servers
+      debug:
+        msg: "{{ inventory_hostname }} has backup enabled"
+      when: 
+        - backup_enabled is defined
+        - backup_enabled | bool
