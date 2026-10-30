@@ -1,0 +1,71 @@
+---
+- name: Pre-deployment health check
+  uri:
+    url: "http://{{ inventory_hostname }}"
+    method: GET
+    status_code: 200
+  register: pre_deploy_health
+  ignore_errors: yes
+  
+- name: Remove from load balancer
+  uri:
+    url: "http://{{ hostvars['lb01']['ansible_host'] }}/disable/{{ inventory_hostname }}"
+    method: POST
+  delegate_to: lb01
+  ignore_errors: yes
+  
+- name: Wait for connection draining
+  pause:
+    seconds: 15
+    
+- name: Backup current version
+  copy:
+    src: /var/www/html/index.html
+    dest: "/var/www/html/index.html.backup.{{ ansible_date_time.epoch }}"
+    remote_src: yes
+    
+- name: Deploy new application version
+  template:
+    src: ../templates/index.html.j2
+    dest: /var/www/html/index.html
+    owner: nginx
+    group: nginx
+    mode: '0644'
+  notify: restart nginx
+  
+- name: Restart nginx service
+  service:
+    name: nginx
+    state: restarted
+    
+- name: Wait for service to be ready
+  wait_for:
+    port: 80
+    host: "{{ inventory_hostname }}"
+    delay: 5
+    timeout: 60
+    
+- name: Post-deployment health check
+  uri:
+    url: "http://{{ inventory_hostname }}"
+    method: GET
+    status_code: 200
+    return_content: yes
+  register: post_deploy_health
+  retries: 5
+  delay: 10
+  until: post_deploy_health.status == 200
+  
+- name: Verify version deployment
+  assert:
+    that:
+      - app_version in post_deploy_health.content
+    fail_msg: "Version verification failed for {{ inventory_hostname }}"
+    success_msg: "Version {{ app_version }} successfully deployed to {{ inventory_hostname }}"
+    
+- name: Add back to load balancer
+  uri:
+    url: "http://{{ hostvars['lb01']['ansible_host'] }}/enable/{{ inventory_hostname }}"
+    method: POST
+  delegate_to: lb01
+  ignore_errors: yes

@@ -1,0 +1,111 @@
+---
+- name: Blue-Green Rolling Deployment
+  hosts: localhost
+  gather_facts: no
+  vars:
+    app_version: "{{ new_version | default('4.0.0') }}"
+    version_color: "{{ new_color | default('purple') }}"
+    
+  tasks:
+    - name: Divide servers into blue and green groups
+      set_fact:
+        blue_servers: "{{ groups['webservers'][::2] }}"  # Even indexed servers
+        green_servers: "{{ groups['webservers'][1::2] }}" # Odd indexed servers
+        
+    - name: Display deployment strategy
+      debug:
+        msg:
+          - "Blue servers (deploy first): {{ blue_servers }}"
+          - "Green servers (deploy second): {{ green_servers }}"
+          - "Version: {{ app_version }}"
+
+- name: Deploy to Blue Servers
+  hosts: "{{ hostvars['localhost']['blue_servers'] }}"
+  become: yes
+  serial: 1
+  vars:
+    app_version: "{{ hostvars['localhost']['app_version'] }}"
+    version_color: "{{ hostvars['localhost']['version_color'] }}"
+    deployment_phase: "blue"
+    
+  tasks:
+    - name: Blue phase deployment
+      include_tasks: ../tasks/deploy-with-checks.yml
+      
+    - name: Blue phase validation
+      uri:
+        url: "http://{{ inventory_hostname }}"
+        method: GET
+        return_content: yes
+      register: blue_validation
+      
+    - name: Log blue deployment success
+      debug:
+        msg: "Blue server {{ inventory_hostname }} successfully updated to {{ app_version }}"
+
+- name: Validate Blue Deployment
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Comprehensive blue testing
+      uri:
+        url: "http://{{ item }}"
+        method: GET
+        status_code: 200
+        return_content: yes
+      loop: "{{ blue_servers }}"
+      register: blue_tests
+      
+    - name: Evaluate blue deployment
+      set_fact:
+        blue_success: "{{ blue_tests.results | selectattr('status', 'equalto', 200) | list | length == blue_servers | length }}"
+        
+    - name: Pause for blue validation
+      pause:
+        prompt: "Blue deployment complete. Validate application behavior. Press enter to continue with green deployment or Ctrl+C to abort"
+        
+    - name: Abort if blue deployment failed
+      fail:
+        msg: "Blue deployment validation failed. Aborting green deployment."
+      when: not blue_success
+
+- name: Deploy to Green Servers
+  hosts: "{{ hostvars['localhost']['green_servers'] }}"
+  become: yes
+  serial: 1
+  vars:
+    app_version: "{{ hostvars['localhost']['app_version'] }}"
+    version_color: "{{ hostvars['localhost']['version_color'] }}"
+    deployment_phase: "green"
+    
+  tasks:
+    - name: Green phase deployment
+      include_tasks: ../tasks/deploy-with-checks.yml
+      
+    - name: Green phase validation
+      uri:
+        url: "http://{{ inventory_hostname }}"
+        method: GET
+        return_content: yes
+      register: green_validation
+      
+    - name: Log green deployment success
+      debug:
+        msg: "Green server {{ inventory_hostname }} successfully updated to {{ app_version }}"
+
+- name: Final Deployment Validation
+  hosts: webservers
+  gather_facts: no
+  tasks:
+    - name: Final comprehensive health check
+      uri:
+        url: "http://{{ inventory_hostname }}"
+        method: GET
+        status_code: 200
+        return_content: yes
+      register: final_health
+      
+    - name: Deployment summary
+      debug:
+        msg: "All servers successfully updated to version {{ hostvars['localhost']['app_version'] }}"
+      run_once: true

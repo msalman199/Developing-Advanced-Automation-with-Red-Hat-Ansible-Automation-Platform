@@ -1,0 +1,99 @@
+---
+- name: Canary Deployment Strategy
+  hosts: localhost
+  gather_facts: no
+  vars:
+    app_version: "{{ new_version | default('3.0.0') }}"
+    version_color: "{{ new_color | default('red') }}"
+    canary_percentage: "{{ canary_percent | default(25) }}"
+    
+  tasks:
+    - name: Calculate canary servers
+      set_fact:
+        total_servers: "{{ groups['webservers'] | length }}"
+        canary_count: "{{ ((groups['webservers'] | length) * (canary_percentage | int) / 100) | round(0, 'ceil') | int }}"
+        
+    - name: Display canary deployment info
+      debug:
+        msg: 
+          - "Total servers: {{ total_servers }}"
+          - "Canary percentage: {{ canary_percentage }}%"
+          - "Canary servers count: {{ canary_count }}"
+          - "Deploying version: {{ app_version }}"
+
+- name: Phase 1 - Canary Deployment
+  hosts: webservers[0:{{ hostvars['localhost']['canary_count'] | int - 1 }}]
+  become: yes
+  serial: 1
+  vars:
+    app_version: "{{ hostvars['localhost']['app_version'] }}"
+    version_color: "{{ hostvars['localhost']['version_color'] }}"
+    
+  tasks:
+    - name: Deploy to canary servers
+      include_tasks: ../tasks/deploy-with-checks.yml
+      
+    - name: Canary health monitoring
+      uri:
+        url: "http://{{ inventory_hostname }}"
+        method: GET
+        return_content: yes
+      register: canary_health
+      retries: 3
+      delay: 10
+      
+    - name: Validate canary deployment
+      assert:
+        that:
+          - canary_health.status == 200
+          - app_version in canary_health.content
+        fail_msg: "Canary deployment failed validation"
+        success_msg: "Canary server {{ inventory_hostname }} validated successfully"
+
+- name: Phase 2 - Canary Validation and Monitoring
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Wait for canary monitoring period
+      pause:
+        prompt: "Canary deployment complete. Monitor for {{ canary_monitor_time | default(300) }} seconds. Press enter to continue with full deployment or Ctrl+C to abort"
+        
+    - name: Perform comprehensive canary tests
+      uri:
+        url: "http://{{ item }}"
+        method: GET
+        status_code: 200
+      loop: "{{ groups['webservers'][0:canary_count | int] }}"
+      register: canary_tests
+      
+    - name: Evaluate canary success
+      set_fact:
+        canary_success: "{{ canary_tests.results | selectattr('status', 'equalto', 200) | list | length == canary_count | int }}"
+        
+    - name: Abort if canary failed
+      fail:
+        msg: "Canary deployment failed. Aborting full rollout."
+      when: not canary_success
+
+- name: Phase 3 - Full Deployment
+  hosts: webservers[{{ hostvars['localhost']['canary_count'] | int }}:]
+  become: yes
+  serial: "{{ batch_size | default(2) }}"
+  vars:
+    app_version: "{{ hostvars['localhost']['app_version'] }}"
+    version_color: "{{ hostvars['localhost']['version_color'] }}"
+    
+  tasks:
+    - name: Deploy to remaining servers
+      include_tasks: ../tasks/deploy-with-checks.yml
+      
+    - name: Final validation
+      uri:
+        url: "http://{{ inventory_hostname }}"
+        method: GET
+        return_content: yes
+      register: final_validation
+      
+    - name: Confirm deployment success
+      debug:
+        msg: "Successfully deployed version {{ app_version }} to {{ inventory_hostname }}"

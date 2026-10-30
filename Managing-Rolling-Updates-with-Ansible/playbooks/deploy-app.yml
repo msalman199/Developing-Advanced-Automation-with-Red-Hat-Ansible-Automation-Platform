@@ -1,0 +1,39 @@
+---
+- name: Deploy Web Application
+  hosts: webservers
+  become: yes
+  vars:
+    app_version: "1.0.0"
+    version_color: "blue"
+    
+  tasks:
+    - name: Install Nginx
+      package:
+        name: nginx
+        state: present
+        
+    - name: Start and enable Nginx
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+        
+    - name: Deploy application
+      template:
+        src: ../templates/index.html.j2
+        dest: /var/www/html/index.html
+        owner: nginx
+        group: nginx
+        mode: '0644'
+      notify: restart nginx
+      
+    - name: Ensure Nginx is running
+      service:
+        name: nginx
+        state: started
+        
+  handlers:
+    - name: restart nginx
+      service:
+        name: nginx
+        state: restarted
