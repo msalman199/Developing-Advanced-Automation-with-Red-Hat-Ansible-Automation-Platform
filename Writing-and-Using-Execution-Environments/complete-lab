@@ -1,0 +1,697 @@
+Lab 19: Writing and Using Execution Environments
+Objectives
+
+By the end of this lab, you will be able to:
+
+    Understand the concept and benefits of Ansible execution environments
+    Create a custom execution environment definition using ansible-builder
+    Build and test custom execution environments with a publicly accessible base image
+    Configure and run Ansible playbooks using custom execution environments
+    Troubleshoot common issues with execution environments
+    Implement best practices for execution environment development, versioning, and validation
+
+Prerequisites
+
+Before starting this lab, you should have:
+
+    Basic understanding of Ansible playbooks and modules
+    Familiarity with Docker/Podman concepts and containerization
+    Knowledge of Linux command line operations
+    Understanding of YAML syntax
+    Experience with package management (pip, yum/dnf)
+    Basic knowledge of Python virtual environments
+
+Required Software
+
+This lab uses a CentOS/RHEL 8 or 9 based system with Docker installed. Install the required Python tooling with the exact commands below:
+
+python3 -m pip install --upgrade pip
+python3 -m pip install ansible-core ansible-builder ansible-runner
+
+Verify the tools installed correctly:
+
+ansible --version
+ansible-builder --version
+ansible-runner --version
+docker --version
+
+Important note on base images: This lab uses quay.io/centos/centos:stream9 as the base image for all execution environments. This image is publicly available on Quay.io and does not require authentication, unlike registry.redhat.io images which require a valid Red Hat subscription login. If you have Red Hat credentials and have run docker login registry.redhat.io, you may substitute registry.redhat.io/ubi8/ubi:latest or registry.access.redhat.com/ubi8/ubi:latest anywhere you see the CentOS Stream image, but the lab as written will work fully without any registry authentication.
+Lab Environment Setup
+
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment - no need to build your own VM or install additional software.
+
+Your lab environment includes:
+
+    CentOS/RHEL 8 or 9 based system
+    Ansible Core pre-installed
+    Docker engine configured and running
+    ansible-builder tool available
+    Internet connectivity for downloading packages (no registry authentication required)
+    Sufficient disk space for container images
+
+Task 1: Understanding Execution Environments and Building a Custom EE
+Subtask 1.1: Explore the Current Environment and Document Execution Environment Concepts
+
+    Check current Ansible version and configuration:
+
+ansible --version
+python3 --version
+pip3 list | grep -i ansible
+
+    Create the lab working directory and a baseline test playbook:
+
+mkdir -p ~/ansible-ee-lab
+cd ~/ansible-ee-lab
+
+cat > test-environment.yml << 'EOF'
+---
+- name: Test Current Environment
+  hosts: localhost
+  gather_facts: yes
+  tasks:
+    - name: Display Ansible version
+      debug:
+        msg: "Ansible version: {{ ansible_version.full }}"
+
+    - name: Display Python version
+      debug:
+        msg: "Python version: {{ ansible_python_version }}"
+
+    - name: Test a common module
+      setup:
+      register: facts
+
+    - name: Display OS information
+      debug:
+        msg: "OS: {{ facts.ansible_facts.ansible_distribution }} {{ facts.ansible_facts.ansible_distribution_version }}"
+EOF
+
+    Run the test playbook:
+
+ansible-playbook test-environment.yml
+
+You should see three debug task outputs printing your Ansible version, Python version, and OS distribution name/version, with a PLAY RECAP showing ok=4 changed=0 unreachable=0 failed=0.
+
+    Document execution environment concepts for later reference:
+
+cat > execution-environments-overview.md << 'EOF'
+# Execution Environments Overview
+
+## What are Execution Environments?
+
+Execution environments are container images that include:
+- Ansible Core
+- Python dependencies
+- System packages
+- Collections and custom modules
+- Configuration files
+
+## Benefits
+
+1. Consistency: Same environment across development, testing, and production
+2. Isolation: Dependencies don't conflict with system packages
+3. Portability: Can run anywhere containers are supported
+4. Scalability: Easy to distribute and scale automation
+5. Version Control: Immutable infrastructure for automation
+
+## Use Cases
+
+- Multi-team environments with different requirements
+- Complex dependency management
+- Compliance and security requirements
+- Cloud-native automation platforms
+EOF
+
+Deliverable: The file ~/ansible-ee-lab/execution-environments-overview.md exists and the test-environment.yml playbook run completes with failed=0. This confirms your baseline Ansible tooling works before you build any containers.
+Subtask 1.2: Define and Build a Custom Execution Environment
+
+    Create the execution environment directory structure:
+
+mkdir -p ~/custom-ee/requirements
+cd ~/custom-ee
+
+    Create the execution environment definition file using the public CentOS Stream base image:
+
+cat > execution-environment.yml << 'EOF'
+---
+version: 3
+
+images:
+  base_image:
+    name: 'quay.io/centos/centos:stream9'
+
+dependencies:
+  galaxy: requirements/requirements.yml
+  python: requirements/requirements.txt
+  system: requirements/bindep.txt
+
+additional_build_steps:
+  prepend_base:
+    - RUN whoami
+    - RUN cat /etc/os-release
+  prepend_galaxy:
+    - RUN pip3 install --upgrade pip setuptools
+  prepend_builder:
+    - RUN dnf -y update && dnf clean all
+  append_final:
+    - RUN ls -la /usr/share/ansible || true
+EOF
+
+    Create the Python requirements file:
+
+cat > requirements/requirements.txt << 'EOF'
+requests>=2.25.1
+jinja2>=3.0.0
+pyyaml>=5.4.1
+netaddr>=0.8.0
+dnspython>=2.1.0
+xmltodict>=0.12.0
+jmespath>=0.10.0
+EOF
+
+    Create the system dependencies file:
+
+cat > requirements/bindep.txt << 'EOF'
+git [platform:rpm]
+rsync [platform:rpm]
+openssh-clients [platform:rpm]
+sshpass [platform:rpm]
+curl [platform:rpm]
+wget [platform:rpm]
+unzip [platform:rpm]
+tar [platform:rpm]
+gzip [platform:rpm]
+python3-devel [platform:rpm]
+gcc [platform:rpm]
+openssl-devel [platform:rpm]
+libffi-devel [platform:rpm]
+EOF
+
+    Create the Ansible collections requirements file:
+
+cat > requirements/requirements.yml << 'EOF'
+---
+collections:
+  - name: community.general
+    version: ">=5.0.0"
+  - name: ansible.posix
+    version: ">=1.3.0"
+  - name: community.crypto
+    version: ">=2.0.0"
+EOF
+
+    Build the execution environment:
+
+cd ~/custom-ee
+ansible-builder build --tag custom-ansible-ee:latest --verbosity 2
+
+The build process pulls quay.io/centos/centos:stream9 (no login required), installs system packages, installs the Python requirements, installs the Galaxy collections, and produces a final image. The build log ends with a line similar to Successfully tagged custom-ansible-ee:latest.
+
+    Verify the build completed successfully:
+
+docker images | grep custom-ansible-ee
+
+You should see a row listing custom-ansible-ee with the tag latest, an image ID, and a size.
+
+    Test the image interactively:
+
+docker run -it --rm custom-ansible-ee:latest /bin/bash -c "ansible --version && ansible-galaxy collection list && exit"
+
+Deliverable: A docker images listing showing custom-ansible-ee:latest, plus terminal output from the interactive test showing the Ansible version and a table listing community.general, ansible.posix, and community.crypto as installed collections.
+Task 2: Running Playbooks with the Custom Execution Environment
+Subtask 2.1: Create and Run Test Playbooks Inside the Execution Environment
+
+    Create a comprehensive functional test playbook:
+
+cat > ~/ansible-ee-lab/test-custom-ee.yml << 'EOF'
+---
+- name: Test Custom Execution Environment
+  hosts: localhost
+  gather_facts: yes
+
+  tasks:
+    - name: Test basic Ansible functionality
+      debug:
+        msg: "Ansible is working in custom EE!"
+
+    - name: Test community.general collection
+      community.general.json_query:
+        data: {"test": "value", "number": 42}
+        query: "test"
+      register: json_test
+
+    - name: Display JSON query result
+      debug:
+        msg: "JSON query result: {{ json_test.result }}"
+
+    - name: Test file operations
+      tempfile:
+        state: file
+        suffix: .test
+      register: temp_file
+
+    - name: Write to temp file
+      copy:
+        content: "Custom EE test successful!"
+        dest: "{{ temp_file.path }}"
+
+    - name: Read from temp file
+      slurp:
+        src: "{{ temp_file.path }}"
+      register: file_content
+
+    - name: Display file content
+      debug:
+        msg: "File content: {{ file_content.content | b64decode }}"
+
+    - name: Clean up temp file
+      file:
+        path: "{{ temp_file.path }}"
+        state: absent
+
+    - name: Summarize test results
+      debug:
+        msg:
+          - "=== Custom Execution Environment Test Summary ==="
+          - "Ansible Version: {{ ansible_version.full }}"
+          - "Python Version: {{ ansible_python_version }}"
+          - "Basic functionality: PASSED"
+          - "JSON operations: {{ 'PASSED' if json_test.result == 'value' else 'FAILED' }}"
+          - "File operations: PASSED"
+EOF
+
+    Run the playbook directly inside the execution environment container:
+
+cd ~/ansible-ee-lab
+
+docker run --rm \
+  -v "$(pwd)":/workspace \
+  -w /workspace \
+  custom-ansible-ee:latest \
+  ansible-playbook test-custom-ee.yml
+
+Expected result: the play recap shows ok=7 changed=... failed=0, and the final debug task prints the summary block ending with JSON operations: PASSED and File operations: PASSED.
+
+    Create a wrapper script for convenience:
+
+cat > ~/run-with-custom-ee.sh << 'EOF'
+#!/bin/bash
+
+# Custom Execution Environment Runner Script
+# Usage: ./run-with-custom-ee.sh <playbook> [additional-args]
+
+set -e
+
+PLAYBOOK=$1
+CUSTOM_EE_IMAGE="custom-ansible-ee:latest"
+WORKSPACE_DIR=$(pwd)
+
+if [ -z "$PLAYBOOK" ]; then
+    echo "Usage: $0 <playbook> [additional-ansible-playbook-args]"
+    exit 1
+fi
+
+if [ ! -f "$PLAYBOOK" ]; then
+    echo "Error: Playbook '$PLAYBOOK' not found!"
+    exit 1
+fi
+
+shift
+
+echo "Running playbook '$PLAYBOOK' with custom execution environment..."
+echo "Image: $CUSTOM_EE_IMAGE"
+echo "Workspace: $WORKSPACE_DIR"
+echo "----------------------------------------"
+
+docker run --rm \
+    -v "$WORKSPACE_DIR:/workspace" \
+    -w /workspace \
+    -e ANSIBLE_HOST_KEY_CHECKING=False \
+    -e ANSIBLE_STDOUT_CALLBACK=yaml \
+    "$CUSTOM_EE_IMAGE" \
+    ansible-playbook "$PLAYBOOK" "$@"
+
+echo "----------------------------------------"
+echo "Playbook execution completed!"
+EOF
+
+chmod +x ~/run-with-custom-ee.sh
+
+    Test the wrapper script:
+
+cd ~/ansible-ee-lab
+~/run-with-custom-ee.sh test-custom-ee.yml -v
+
+Deliverable: Console output showing Playbook execution completed! printed by the wrapper script, confirming the script successfully launched the container and ran the playbook to completion.
+Subtask 2.2: Run Playbooks Using ansible-runner
+
+    Set up the ansible-runner project structure:
+
+mkdir -p ~/ansible-runner-test/{project,inventory}
+cp ~/ansible-ee-lab/test-custom-ee.yml ~/ansible-runner-test/project/
+
+cat > ~/ansible-runner-test/inventory/hosts << 'EOF'
+[local]
+localhost ansible_connection=local
+EOF
+
+    Run the playbook with the custom execution environment via ansible-runner:
+
+cd ~/ansible-runner-test
+
+ansible-runner run project \
+  --playbook test-custom-ee.yml \
+  --container-image custom-ansible-ee:latest \
+  --inventory inventory/hosts
+
+Expected result: ansible-runner prints PLAY [Test Custom Execution Environment] followed by the same task sequence as before, ending with PLAY RECAP showing failed=0.
+
+Deliverable: A successful ansible-runner run with exit code 0. Confirm with:
+
+echo "Exit code: $?"
+
+This should print Exit code: 0.
+Task 3: Multi-Environment Builds, Validation, and Performance Testing
+Subtask 3.1: Build Development and Production Variants
+
+    Create separate directories for development and production execution environments:
+
+mkdir -p ~/multi-ee/development/requirements
+mkdir -p ~/multi-ee/production/requirements
+
+    Create the development execution environment definition:
+
+cat > ~/multi-ee/development/execution-environment.yml << 'EOF'
+---
+version: 3
+
+images:
+  base_image:
+    name: 'quay.io/centos/centos:stream9'
+
+dependencies:
+  galaxy: requirements/requirements.yml
+  python: requirements/requirements.txt
+  system: requirements/bindep.txt
+
+additional_build_steps:
+  prepend_base:
+    - RUN echo "Building Development EE"
+  append_final:
+    - RUN pip3 install ansible-lint yamllint pytest pytest-ansible
+EOF
+
+cp ~/custom-ee/requirements/* ~/multi-ee/development/requirements/
+
+    Create the production execution environment definition with a minimal footprint:
+
+cat > ~/multi-ee/production/execution-environment.yml << 'EOF'
+---
+version: 3
+
+images:
+  base_image:
+    name: 'quay.io/centos/centos:stream9'
+
+dependencies:
+  galaxy: requirements/requirements.yml
+  python: requirements/requirements.txt
+  system: requirements/bindep.txt
+
+additional_build_steps:
+  prepend_base:
+    - RUN echo "Building Production EE"
+  append_final:
+    - RUN dnf -y remove gcc python3-devel && dnf clean all
+    - RUN pip3 cache purge
+EOF
+
+cat > ~/multi-ee/production/requirements/requirements.txt << 'EOF'
+requests>=2.25.1
+jinja2>=3.0.0
+pyyaml>=5.4.1
+netaddr>=0.8.0
+EOF
+
+cat > ~/multi-ee/production/requirements/requirements.yml << 'EOF'
+---
+collections:
+  - name: ansible.posix
+    version: ">=1.3.0"
+  - name: community.general
+    version: ">=5.0.0"
+EOF
+
+cat > ~/multi-ee/production/requirements/bindep.txt << 'EOF'
+openssh-clients [platform:rpm]
+rsync [platform:rpm]
+EOF
+
+    Build both variants:
+
+cd ~/multi-ee/development
+ansible-builder build --tag custom-ansible-ee:dev --verbosity 1
+
+cd ~/multi-ee/production
+ansible-builder build --tag custom-ansible-ee:prod --verbosity 1
+
+    Compare image sizes to confirm the production image is smaller:
+
+docker images | grep custom-ansible-ee
+
+Deliverable: A docker images table listing custom-ansible-ee:latest, custom-ansible-ee:dev, and custom-ansible-ee:prod, where the prod tag has a smaller size (in MB) than the dev tag, confirming the production build successfully stripped build tools.
+Subtask 3.2: Validate the Execution Environment
+
+    Create a validation script that runs an assertion-based playbook inside the container:
+
+cat > ~/validate-ee.sh << 'EOF'
+#!/bin/bash
+
+# Execution Environment Validation Script
+set -e
+
+EE_IMAGE=${1:-"custom-ansible-ee:latest"}
+VALIDATION_DIR=$(mktemp -d)
+
+echo "Validating Execution Environment: $EE_IMAGE"
+echo "=========================================="
+
+cd "$VALIDATION_DIR"
+
+cat > validate.yml << 'PLAYBOOK_EOF'
+---
+- name: Validate Execution Environment
+  hosts: localhost
+  gather_facts: yes
+
+  tasks:
+    - name: Check Ansible version
+      debug:
+        msg: "Ansible version: {{ ansible_version.full }}"
+
+    - name: Validate Python version
+      assert:
+        that:
+          - ansible_python_version is version('3.6', '>=')
+        fail_msg: "Python version must be 3.6 or higher"
+        success_msg: "Python version check passed"
+
+    - name: Test basic modules
+      setup:
+      register: setup_result
+
+    - name: Validate setup module
+      assert:
+        that:
+          - setup_result.ansible_facts is defined
+        fail_msg: "Setup module failed"
+        success_msg: "Setup module working"
+
+    - name: Test file operations
+      tempfile:
+        state: file
+      register: temp_file
+
+    - name: Clean up temp file
+      file:
+        path: "{{ temp_file.path }}"
+        state: absent
+
+    - name: List installed collections
+      shell: ansible-galaxy collection list
+      register: collections
+
+    - name: Validation summary
+      debug:
+        msg:
+          - "=== Validation Summary ==="
+          - "Ansible Version: {{ ansible_version.full }}"
+          - "Python Version: {{ ansible_python_version }}"
+          - "Collections found: {{ collections.stdout_lines | length }}"
+          - "Overall Status: PASSED"
+PLAYBOOK_EOF
+
+echo "localhost ansible_connection=local" > inventory
+
+docker run --rm \
+    -v "$VALIDATION_DIR:/workspace" \
+    -w /workspace \
+    "$EE_IMAGE" \
+    ansible-playbook validate.yml -i inventory
+
+echo "=========================================="
+echo "Validation completed for $EE_IMAGE"
+
+cd /
+rm -rf "$VALIDATION_DIR"
+EOF
+
+chmod +x ~/validate-ee.sh
+
+    Run validation against the custom execution environment:
+
+~/validate-ee.sh custom-ansible-ee:latest
+
+Expected result: the final debug task prints Overall Status: PASSED, and the script prints Validation completed for custom-ansible-ee:latest.
+Subtask 3.3: Performance Testing
+
+    Create a complete performance test script that measures CPU and memory task execution time inside the execution environment:
+
+cat > ~/performance-test-ee.sh << 'EOF'
+#!/bin/bash
+
+# Execution Environment Performance Test
+set -e
+
+EE_IMAGE=${1:-"custom-ansible-ee:latest"}
+TEST_ITERATIONS=${2:-5}
+PERF_DIR=$(mktemp -d)
+
+echo "Performance Testing: $EE_IMAGE"
+echo "Test Iterations: $TEST_ITERATIONS"
+echo "=================================="
+
+cat > "$PERF_DIR/perf-test.yml" << 'PLAYBOOK_EOF'
+---
+- name: Performance Test
+  hosts: localhost
+  gather_facts: yes
+  tasks:
+    - name: CPU intensive task
+      shell: |
+        python3 -c "
+        import time
+        start = time.time()
+        sum(i*i for i in range(100000))
+        end = time.time()
+        print(f'CPU test completed in {end-start:.3f} seconds')
+        "
+      register: cpu_test
+
+    - name: Display CPU test result
+      debug:
+        msg: "{{ cpu_test.stdout }}"
+
+    - name: Memory test
+      shell: |
+        python3 -c "
+        import time
+        start = time.time()
+        data = [x for x in range(1000000)]
+        total = sum(data)
+        end = time.time()
+        print(f'Memory test completed in {end-start:.3f} seconds, sum={total}')
+        "
+      register: memory_test
+
+    - name: Display memory test result
+      debug:
+        msg: "{{ memory_test.stdout }}"
+
+    - name: Container startup marker
+      debug:
+        msg: "Performance test finished at {{ ansible_date_time.iso8601 }}"
+PLAYBOOK_EOF
+
+echo "localhost ansible_connection=local" > "$PERF_DIR/inventory"
+
+for i in $(seq 1 "$TEST_ITERATIONS"); do
+    echo "--- Iteration $i of $TEST_ITERATIONS ---"
+    START_TIME=$(date +%s.%N)
+
+    docker run --rm \
+        -v "$PERF_DIR:/workspace" \
+        -w /workspace \
+        "$EE_IMAGE" \
+        ansible-playbook perf-test.yml -i inventory
+
+    END_TIME=$(date +%s.%N)
+    ELAPSED=$(echo "$END_TIME - $START_TIME" | bc)
+    echo "Total container run time (including startup): ${ELAPSED} seconds"
+    echo ""
+done
+
+echo "=================================="
+echo "Performance testing completed for $EE_IMAGE"
+
+rm -rf "$PERF_DIR"
+EOF
+
+chmod +x ~/performance-test-ee.sh
+
+    Run the performance test with three iterations:
+
+~/performance-test-ee.sh custom-ansible-ee:latest 3
+
+Expected result: for each of the three iterations, you see a CPU test completed in X.XXX seconds message, a Memory test completed in X.XXX seconds, sum=... message, and a Total container run time line. The script finishes with Performance testing completed for custom-ansible-ee:latest.
+
+    Document a troubleshooting reference based on issues you may have encountered while building and running these execution environments:
+
+cat > ~/ee-troubleshooting.md << 'EOF'
+# Execution Environment Troubleshooting Guide
+
+## Common Issues and Solutions
+
+### 1. Build Failures
+
+Issue: ansible-builder fails with dependency conflicts.
+Solution: Check requirements.txt for version conflicts, pin specific versions, and review build logs for the exact failing package.
+
+Issue: Base image pull fails with an authentication error.
+Solution: Confirm you are using a public image such as quay.io/centos/centos:stream9. If you intentionally use a registry.redhat.io image, run docker login registry.redhat.io first with valid credentials.
+
+### 2. Runtime Issues
+
+Issue: Module not found errors.
+Solution: Verify the collection is listed in requirements.yml and rebuild the image; confirm with ansible-galaxy collection list inside the container.
+
+Issue: Permission denied errors.
+Solution: Check volume mount permissions on the host directory and the container's working directory ownership.
+
+### 3. Performance Issues
+
+Issue: Slow container startup.
+Solution: Reduce image layers, remove unused build dependencies in a production variant, and avoid unnecessary package installs.
+
+Issue: Large image sizes.
+Solution: Use a minimal base image, clean dnf and pip caches after installs, and remove compilers (gcc, python3-devel) from production images.
+
+## Debugging Commands
+
+docker run -it --rm <image> /bin/bash
+docker history <image>
+docker ps -a
+docker logs <container-id>
+docker stats
+EOF
+
+Deliverable: The performance test script completes all iterations without errors and prints timing data for each run; ~/ee-troubleshooting.md exists as a reference document. Together these confirm the execution environment is functionally correct and its performance characteristics have been measured and recorded.
+Expected Outcomes
+
+    A working custom execution environment image (custom-ansible-ee:latest) built from a publicly accessible base image, containing the required Python packages, system packages, and Ansible collections
+    Verified playbook execution inside the custom execution environment using both direct docker run and ansible-runner, with all test playbooks completing with failed=0
+    Development and production variants of the execution environment built and compared, along with validation and performance test scripts that confirm correctness and measure execution time
+
+Conclusion
+
+In this lab you built a complete Ansible execution environment workflow from the ground up, starting with a definition file based on the publicly available quay.io/centos/centos:stream9 image and progressing through Python, system, and collection dependency management with ansible-builder. You verified the resulting image by running functional test playbooks both directly with Docker and through ansible-runner, then extended the workflow by building separate development and production variants to see how build steps affect image size and content. Finally, you created validation and performance testing scripts that exercise the execution environment and produce concrete, checkable output confirming the environment behaves correctly under load. With these skills, you are prepared to design, build, and maintain execution environments for real Ansible Automation Platform deployments, including tagging strategies, private registries, and environment-specific dependency sets for larger automation projects.

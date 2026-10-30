@@ -1,0 +1,18 @@
+---
+version: 3
+
+images:
+  base_image:
+    name: 'quay.io/centos/centos:stream9'
+
+dependencies:
+  galaxy: requirements/requirements.yml
+  python: requirements/requirements.txt
+  system: requirements/bindep.txt
+
+additional_build_steps:
+  prepend_base:
+    - RUN echo "Building Production EE"
+  append_final:
+    - RUN dnf -y remove gcc python3-devel && dnf clean all
+    - RUN pip3 cache purge
