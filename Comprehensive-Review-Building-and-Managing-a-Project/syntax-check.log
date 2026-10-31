@@ -1,0 +1,27 @@
+ERROR! We were unable to read either as JSON nor YAML, these are the errors we got from each:
+JSON: Expecting value: line 1 column 1 (char 0)
+
+Syntax Error while loading YAML.
+  but found another document
+
+The error appears to be in '/home/centos/comprehensive-project/roles/webserver/tasks/main.yml': line 25, column 1, but may
+be elsewhere in the file depending on the exact syntax problem.
+
+The offending line appears to be:
+
+  notify: restart apache
+---
+^ here
+ansible-playbook [core 2.14.18]
+  config file = /home/centos/comprehensive-project/ansible.cfg
+  configured module search path = ['/home/centos/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']
+  ansible python module location = /usr/lib/python3.9/site-packages/ansible
+  ansible collection location = /home/centos/.ansible/collections:/usr/share/ansible/collections
+  executable location = /usr/bin/ansible-playbook
+  python version = 3.9.25 (main, Nov 10 2025, 00:00:00) [GCC 11.5.0 20240719 (Red Hat 11.5.0-14)] (/usr/bin/python3)
+  jinja version = 3.1.2
+  libyaml = True
+Using /home/centos/comprehensive-project/ansible.cfg as config file
+host_list declined parsing /home/centos/comprehensive-project/inventories/production.yml as it did not pass its verify_file() method
+script declined parsing /home/centos/comprehensive-project/inventories/production.yml as it did not pass its verify_file() method
+Parsed /home/centos/comprehensive-project/inventories/production.yml inventory source with yaml plugin

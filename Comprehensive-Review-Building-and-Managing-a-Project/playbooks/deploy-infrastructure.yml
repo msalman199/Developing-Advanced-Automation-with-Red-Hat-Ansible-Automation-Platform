@@ -1,0 +1,45 @@
+---
+- name: Deploy Web Servers
+  hosts: webservers
+  become: yes
+
+  pre_tasks:
+    - name: Display deployment information
+      debug:
+        msg: "Deploying to {{ inventory_hostname }} in group(s) {{ group_names }}"
+
+  roles:
+    - webserver
+
+  post_tasks:
+    - name: Verify Apache is running
+      service:
+        name: apache2
+        state: started
+      check_mode: yes
+      register: apache_status
+
+    - name: Display Apache status
+      debug:
+        msg: "Apache change required: {{ apache_status.changed }}"
+
+- name: Deploy Database Server
+  hosts: databases
+  become: yes
+  serial: 1
+
+  roles:
+    - database
+
+  post_tasks:
+    - name: Verify MySQL is running
+      service:
+        name: mysql
+        state: started
+      check_mode: yes
+      register: mysql_status
+
+    - name: Display MySQL status
+      debug:
+        msg: "MySQL change required: {{ mysql_status.changed }}"
+

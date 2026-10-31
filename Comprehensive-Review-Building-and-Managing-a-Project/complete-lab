@@ -1,0 +1,365 @@
+Lab 20: Comprehensive Review: Building and Managing a Project
+Objectives
+By the end of this lab, students will be able to:
+
+Create and manage a well-organized Ansible inventory for a multi-node environment
+Develop modular Ansible roles for common, web server, and database server configuration
+Build a master playbook that orchestrates deployment across multiple host groups
+Debug and troubleshoot playbook execution using check mode, verbosity flags, and ad hoc commands
+Apply best practices for structuring a production-style Ansible project
+Prerequisites
+Before starting this lab, students should have:
+
+Basic understanding of Linux command line operations
+Familiarity with YAML syntax and structure
+Knowledge of Ansible fundamentals (inventories, playbooks, modules)
+Experience with Ansible roles and variables
+Understanding of SSH key-based authentication
+Text editor proficiency (vim, nano, or similar)
+Required tooling (install on the control node if not already present):
+
+sudo apt update
+sudo apt install -y ansible sshpass
+ansible --version
+Lab Environment
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment. No need to build your own virtual machines or configure complex networking.
+
+Your lab environment includes:
+
+1 Ansible Control Node (ansible-control)
+3 Managed Nodes (web-server-1, web-server-2, db-server-1)
+Pre-installed Ansible on the control node
+SSH connectivity between all nodes
+All work in this lab is performed against machines you own or that are provided for you in this isolated practice environment. The goal is to understand how a real automation project is structured, deployed, and debugged so you can build and defend well-run infrastructure.
+
+Task 1: Build the Inventory and Roles
+Subtask 1.1: Create the Project Structure and Inventory
+Confirm you are on the control node:
+whoami
+# Should show: ansible-user
+Create the project directory structure:
+mkdir -p ~/comprehensive-project/{inventories,roles,playbooks,group_vars,scripts,templates}
+cd ~/comprehensive-project
+Create the inventory file:
+vim inventories/production.yml
+---
+all:
+  children:
+    webservers:
+      hosts:
+        web-server-1:
+          ansible_host: 192.168.1.10
+          server_role: primary
+        web-server-2:
+          ansible_host: 192.168.1.11
+          server_role: secondary
+      vars:
+        http_port: 80
+        document_root: /var/www/html
+
+    databases:
+      hosts:
+        db-server-1:
+          ansible_host: 192.168.1.20
+          db_role: master
+      vars:
+        db_port: 3306
+
+  vars:
+    ansible_user: ansible-user
+    ansible_ssh_private_key_file: ~/.ssh/id_rsa
+    environment: production
+Create group variables for webservers:
+vim group_vars/webservers.yml
+---
+packages:
+  - apache2
+  - php
+  - libapache2-mod-php
+  - php-mysql
+
+firewall_rules:
+  - port: "{{ http_port }}"
+    protocol: tcp
+Create group variables for databases:
+vim group_vars/databases.yml
+---
+packages:
+  - mysql-server
+  - python3-pymysql
+
+mysql_root_password: "SecurePassword123!"
+
+mysql_databases:
+  - name: webapp_db
+    encoding: utf8mb4
+    collation: utf8mb4_unicode_ci
+
+mysql_users:
+  - name: webapp_user
+    password: "WebAppPassword456!"
+    priv: "webapp_db.*:ALL"
+    host: "%"
+Test connectivity and inventory structure:
+ansible all -i inventories/production.yml -m ping
+ansible-inventory -i inventories/production.yml --list
+Deliverable: A working inventories/production.yml with two groups (webservers, databases), plus group_vars/webservers.yml and group_vars/databases.yml. ansible all -m ping returns "ping": "pong" for all three managed nodes, and ansible-inventory --list shows the correct group membership and host variables.
+
+Subtask 1.2: Create the Webserver Role
+Generate the role skeleton:
+ansible-galaxy init roles/webserver
+Define webserver tasks:
+vim roles/webserver/tasks/main.yml
+---
+- name: Install web server packages
+  apt:
+    name: "{{ packages }}"
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Start and enable Apache service
+  service:
+    name: apache2
+    state: started
+    enabled: yes
+  become: yes
+
+- name: Deploy web application page
+  template:
+    src: index.php.j2
+    dest: "{{ document_root }}/index.php"
+    owner: www-data
+    group: www-data
+    mode: '0644'
+  become: yes
+  notify: restart apache
+Create the application template:
+vim roles/webserver/templates/index.php.j2
+<?php
+echo "<h1>Welcome to " . gethostname() . "</h1>";
+echo "<p>Server Role: {{ server_role }}</p>";
+echo "<p>Environment: {{ environment }}</p>";
+echo "<p>Server IP: {{ ansible_default_ipv4.address }}</p>";
+echo "<p>Current Time: " . date('Y-m-d H:i:s') . "</p>";
+?>
+Create the handler:
+vim roles/webserver/handlers/main.yml
+---
+- name: restart apache
+  service:
+    name: apache2
+    state: restarted
+  become: yes
+Deliverable: A complete roles/webserver directory containing tasks/main.yml, templates/index.php.j2, and handlers/main.yml. Running ansible-playbook --syntax-check against a playbook that includes this role produces no errors (verified in Task 2).
+
+Subtask 1.3: Create the Database Role
+Generate the role skeleton:
+ansible-galaxy init roles/database
+Define database tasks:
+vim roles/database/tasks/main.yml
+---
+- name: Install MySQL packages
+  apt:
+    name: "{{ packages }}"
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Start and enable MySQL service
+  service:
+    name: mysql
+    state: started
+    enabled: yes
+  become: yes
+
+- name: Set MySQL root password
+  mysql_user:
+    name: root
+    password: "{{ mysql_root_password }}"
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    check_implicit_admin: yes
+    state: present
+  become: yes
+
+- name: Create application databases
+  mysql_db:
+    name: "{{ item.name }}"
+    encoding: "{{ item.encoding | default('utf8mb4') }}"
+    collation: "{{ item.collation | default('utf8mb4_unicode_ci') }}"
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    state: present
+  loop: "{{ mysql_databases }}"
+  become: yes
+
+- name: Create application database users
+  mysql_user:
+    name: "{{ item.name }}"
+    password: "{{ item.password }}"
+    priv: "{{ item.priv }}"
+    host: "{{ item.host | default('localhost') }}"
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    state: present
+  loop: "{{ mysql_users }}"
+  become: yes
+Create the handler:
+vim roles/database/handlers/main.yml
+---
+- name: restart mysql
+  service:
+    name: mysql
+    state: restarted
+  become: yes
+Deliverable: A complete roles/database directory containing tasks/main.yml and handlers/main.yml, using variables defined in group_vars/databases.yml.
+
+Task 2: Build and Run the Master Playbook
+Subtask 2.1: Create the Deployment Playbook
+Create the master playbook:
+vim playbooks/deploy-infrastructure.yml
+---
+- name: Deploy Web Servers
+  hosts: webservers
+  become: yes
+
+  pre_tasks:
+    - name: Display deployment information
+      debug:
+        msg: "Deploying to {{ inventory_hostname }} in group(s) {{ group_names }}"
+
+  roles:
+    - webserver
+
+  post_tasks:
+    - name: Verify Apache is running
+      service:
+        name: apache2
+        state: started
+      check_mode: yes
+      register: apache_status
+
+    - name: Display Apache status
+      debug:
+        msg: "Apache change required: {{ apache_status.changed }}"
+
+- name: Deploy Database Server
+  hosts: databases
+  become: yes
+  serial: 1
+
+  roles:
+    - database
+
+  post_tasks:
+    - name: Verify MySQL is running
+      service:
+        name: mysql
+        state: started
+      check_mode: yes
+      register: mysql_status
+
+    - name: Display MySQL status
+      debug:
+        msg: "MySQL change required: {{ mysql_status.changed }}"
+Run a syntax check before executing anything:
+ansible-playbook -i inventories/production.yml playbooks/deploy-infrastructure.yml --syntax-check
+Expected output: playbook: playbooks/deploy-infrastructure.yml with no errors.
+
+Run the playbook in check mode (dry run) first:
+ansible-playbook -i inventories/production.yml playbooks/deploy-infrastructure.yml --check --diff
+Execute the real deployment:
+ansible-playbook -i inventories/production.yml playbooks/deploy-infrastructure.yml -v
+Deliverable: A successful ansible-playbook run showing PLAY RECAP with failed=0 for all three hosts. Visiting http://192.168.1.10 (or using curl from the control node) returns the rendered PHP page showing the hostname, server role, and environment.
+
+Subtask 2.2: Verify the Deployment
+Check the deployed page from the control node:
+ansible webservers -i inventories/production.yml -m uri -a "url=http://{{ ansible_host }}/index.php return_content=yes"
+Confirm the database and application user exist:
+ansible databases -i inventories/production.yml -m shell \
+  -a "mysql -u root -p'SecurePassword123!' -e 'SHOW DATABASES;'" --become
+Deliverable: The uri module output shows status: 200 for both web servers, and the SHOW DATABASES output includes webapp_db.
+
+Task 3: Debug and Troubleshoot the Deployment
+Subtask 3.1: Use Verbosity and Ad Hoc Commands to Diagnose Issues
+Re-run the playbook with increased verbosity to inspect module arguments and results:
+ansible-playbook -i inventories/production.yml playbooks/deploy-infrastructure.yml -vvv
+Look for the TASK [webserver : Deploy web application page] section and confirm the rendered template values match your inventory variables.
+
+Use --start-at-task to re-run from a specific point without repeating earlier steps:
+ansible-playbook -i inventories/production.yml playbooks/deploy-infrastructure.yml \
+  --start-at-task="Deploy web application page"
+Use an ad hoc command to confirm the Apache service state directly on the host:
+ansible webservers -i inventories/production.yml -a "systemctl is-active apache2" --become
+Expected output: active for each web server.
+
+Deliverable: A terminal transcript showing -vvv output for the template task, a successful --start-at-task re-run, and active returned from the ad hoc systemctl check.
+
+Subtask 3.2: Build a Debugging Playbook
+Create a debugging playbook that inspects logs and confirms database sizes:
+vim playbooks/debug-infrastructure.yml
+---
+- name: Debug Web Services
+  hosts: webservers
+  become: yes
+
+  tasks:
+    - name: Check Apache configuration syntax
+      command: apache2ctl configtest
+      register: apache_config_test
+      changed_when: false
+      failed_when: false
+
+    - name: Display Apache configuration test result
+      debug:
+        msg: "{{ apache_config_test.stderr_lines }}"
+
+    - name: Check recent Apache error log entries
+      command: tail -n 20 /var/log/apache2/error.log
+      register: apache_errors
+      changed_when: false
+      failed_when: false
+
+    - name: Display recent Apache errors
+      debug:
+        msg: "{{ apache_errors.stdout_lines }}"
+
+- name: Debug Database Service
+  hosts: databases
+  become: yes
+
+  tasks:
+    - name: Check MySQL service status
+      command: systemctl status mysql
+      register: mysql_status
+      changed_when: false
+      failed_when: false
+
+    - name: Display MySQL service status
+      debug:
+        msg: "{{ mysql_status.stdout_lines }}"
+
+    - name: Check database sizes
+      command: >
+        mysql -u root -p{{ mysql_root_password }} -e
+        "SELECT table_schema AS Database, SUM(data_length + index_length) / 1024 / 1024 AS Size_MB FROM information_schema.tables GROUP BY table_schema;"
+      register: db_sizes
+      changed_when: false
+      no_log: true
+
+    - name: Display database sizes
+      debug:
+        msg: "{{ db_sizes.stdout_lines }}"
+Run the debugging playbook:
+ansible-playbook -i inventories/production.yml playbooks/debug-infrastructure.yml
+Deliverable: The playbook completes with failed=0, the "Display database sizes" task shows a table listing each schema (including webapp_db and information_schema) with its size in megabytes, and the Apache debug tasks show Syntax OK in the configtest output.
+
+Expected Outcomes
+A complete, syntactically valid Ansible project with a structured inventory, webserver and database roles, and a working master playbook
+A successful, idempotent deployment of Apache and MySQL across three managed nodes, verified by HTTP checks and SQL queries
+Practical experience using --syntax-check, --check --diff, -vvv, and --start-at-task to debug playbook execution before and after a run
+Troubleshooting
+Symptom: ansible-playbook fails with UNREACHABLE for one or more hosts. Diagnostic hint: Run ansible all -i inventories/production.yml -m ping -vvv and check whether the SSH key path in the inventory vars section matches the actual key on the control node.
+Symptom: The mysql_user or mysql_db tasks fail with an authentication error on a second playbook run. Diagnostic hint: The root password may already be set from a previous run while the task still uses the unix socket login; check whether login_unix_socket is still valid after the first password change and adjust the login method accordingly.
+Conclusion
+In this lab you built a complete, self-contained Ansible project from the ground up: a structured inventory with host and group variables, two purpose-built roles for web and database servers, and a master playbook that deploys and verifies both tiers in sequence. You then practiced the core debugging workflow every Ansible practitioner relies on in production â�� syntax checking, dry runs with --check --diff, verbose output with -vvv, targeted re-runs with --start-at-task, and a dedicated debugging playbook that inspects service status, logs, and database size directly. These skills translate directly to managing larger, real-world infrastructure, where the same patterns of modular roles, layered variables, and disciplined troubleshooting scale to dozens or hundreds of hosts. As a next step, consider extending this project with Ansible Vault to encrypt the MySQL passwords stored in group_vars, or explore Ansible Tower/AWX for scheduling and auditing these same playbooks in a team environment.

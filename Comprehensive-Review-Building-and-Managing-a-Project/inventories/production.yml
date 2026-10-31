@@ -1,0 +1,27 @@
+---
+all:
+  children:
+    webservers:
+      hosts:
+        web-server-1:
+          ansible_host: 192.168.1.10
+          server_role: primary
+        web-server-2:
+          ansible_host: 192.168.1.11
+          server_role: secondary
+      vars:
+        http_port: 80
+        document_root: /var/www/html
+
+    databases:
+      hosts:
+        db-server-1:
+          ansible_host: 192.168.1.20
+          db_role: master
+      vars:
+        db_port: 3306
+
+  vars:
+    ansible_user: ansible-user
+    ansible_ssh_private_key_file: ~/.ssh/id_rsa
+    environment: production

@@ -1,0 +1,7 @@
+<?php
+echo "<h1>Welcome to " . gethostname() . "</h1>";
+echo "<p>Server Role: {{ server_role }}</p>";
+echo "<p>Environment: {{ environment }}</p>";
+echo "<p>Server IP: {{ ansible_default_ipv4.address }}</p>";
+echo "<p>Current Time: " . date('Y-m-d H:i:s') . "</p>";
+?>

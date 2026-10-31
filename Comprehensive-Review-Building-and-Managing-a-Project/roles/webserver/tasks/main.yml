@@ -1,0 +1,26 @@
+---
+- name: Install web server packages
+  apt:
+    name: "{{ packages }}"
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Start and enable Apache service
+  service:
+    name: apache2
+    state: started
+    enabled: yes
+  become: yes
+
+- name: Deploy web application page
+  template:
+    src: index.php.j2
+    dest: "{{ document_root }}/index.php"
+    owner: www-data
+    group: www-data
+    mode: '0644'
+  become: yes
+  notify: restart apache
+---
+# tasks file for roles/webserver

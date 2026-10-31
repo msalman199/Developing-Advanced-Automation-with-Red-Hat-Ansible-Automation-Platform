@@ -1,0 +1,47 @@
+---
+- name: Install MySQL packages
+  apt:
+    name: "{{ packages }}"
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Start and enable MySQL service
+  service:
+    name: mysql
+    state: started
+    enabled: yes
+  become: yes
+
+- name: Set MySQL root password
+  mysql_user:
+    name: root
+    password: "{{ mysql_root_password }}"
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    check_implicit_admin: yes
+    state: present
+  become: yes
+
+- name: Create application databases
+  mysql_db:
+    name: "{{ item.name }}"
+    encoding: "{{ item.encoding | default('utf8mb4') }}"
+    collation: "{{ item.collation | default('utf8mb4_unicode_ci') }}"
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    state: present
+  loop: "{{ mysql_databases }}"
+  become: yes
+
+- name: Create application database users
+  mysql_user:
+    name: "{{ item.name }}"
+    password: "{{ item.password }}"
+    priv: "{{ item.priv }}"
+    host: "{{ item.host | default('localhost') }}"
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    state: present
+  loop: "{{ mysql_users }}"
+  become: yes---
+# tasks file for roles/database
